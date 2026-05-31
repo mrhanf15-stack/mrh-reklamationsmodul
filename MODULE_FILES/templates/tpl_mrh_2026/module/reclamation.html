@@ -1,0 +1,509 @@
+{config_load file="$language/lang_$language.conf" section="account"}
+{config_load file="$language/lang_$language.conf" section="newsletter"}
+{config_load file="$language/lang_$language.conf" section="create_account"}
+{config_load file="$language/lang_$language.conf" section="contact_us"}
+{config_load file="lang_`$language`.custom"}
+{config_load file="lang_`$language`.section" section="contact_us"}
+
+{* MRH 2026: Reklamationsformular – Bootstrap 5.3 + Kategorie-Logik + Bildupload *}
+<div class="container mt-4 mb-5">
+  <div class="card">
+    <div class="card-header">
+      <h4 class="mb-0"><span class="fa-solid fa-triangle-exclamation"></span> {$RECLAMATION_HEADING}</h4>
+    </div>
+    <div class="card-body">
+
+      {if $error_message}<div class="alert alert-danger">{$error_message}</div>{/if}
+      {if $success_message}<div class="alert alert-success">{$success_message}</div>{/if}
+
+      {if $FORM_TYPE == 'auth'}
+        {* === Authentifizierungs-Formular === *}
+        <div class="row g-4">
+          <div class="col-lg-6">
+            <div class="card h-100">
+              <div class="card-body">
+                <h5 class="card-title">{$smarty.const.TEXT_RECLAMATION_HEADING}</h5>
+                {$RECLAMATION_CONTENT}
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            {$FORM_ACTION}
+              <div class="card h-100">
+                <div class="card-body">
+                  <h5 class="card-title">{$smarty.const.TEXT_RECLAMATION_AUTH_TITLE} <small class="text-body-secondary">({#text_hint#})</small></h5>
+
+                  <div class="mb-3">
+                    <label class="form-label">{#text_email#}</label>
+                    {$INPUT_EMAIL|replace:"type=\"text\"":"type=\"email\""}
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">{#text_oid#}</label>
+                    {$INPUT_ORDER}
+                  </div>
+
+                  {if $VVIMG}
+                    <div class="mb-3">
+                      <label class="form-label">{#text_sec_code#}</label>
+                      <div>{$VVIMG}</div>
+                    </div>
+                  {/if}
+                  {if $INPUT_CODE}
+                    <div class="mb-3">
+                      <label class="form-label">{#text_inp_code#}</label>
+                      {$INPUT_CODE}
+                    </div>
+                  {/if}
+
+                  {if "SIGN_CONDITIONS_ON_CHECKOUT"|defined}
+                    {if $PRIVACY_CHECKBOX}
+                      <div class="form-check mt-3">
+                        {$PRIVACY_CHECKBOX}
+                        <label class="form-check-label" for="privacy">
+                          {#text_privacy_accept#|sprintf:$smarty.const.STORE_OWNER_EMAIL_ADDRESS} {$PRIVACY_LINK}
+                        </label>
+                      </div>
+                    {else}
+                      <p class="mt-3 small text-body-secondary">{#text_privacy_accept#|sprintf:$smarty.const.STORE_OWNER_EMAIL_ADDRESS} {$PRIVACY_LINK}</p>
+                    {/if}
+                  {else}
+                    {if $PRIVACY_CHECKBOX}
+                      <div class="form-check mt-3">
+                        {$PRIVACY_CHECKBOX}
+                        <label class="form-check-label" for="privacy">
+                          {#text_privacy_accept#} {$PRIVACY_LINK}
+                        </label>
+                      </div>
+                    {/if}
+                  {/if}
+                </div>
+                <div class="card-footer text-end">
+                  {$BUTTON_SUBMIT}
+                </div>
+              </div>
+            {$FORM_END}
+          </div>
+        </div>
+
+      {elseif $FORM_TYPE == 'products'}
+        {* === Produkt-Auswahl mit Kategorie-Logik === *}
+        {$FORM_ACTION}
+
+          <h5 class="mb-3">{$RECLAMATION_INFO}</h5>
+
+          {* Allgemeine Hinweise *}
+          <div class="alert alert-info mb-3">
+            <span class="fa-solid fa-circle-info me-1"></span>
+            {$smarty.const.TEXT_RECLAMATION_INTRO}
+          </div>
+
+          {if isset($PRODUCTS) && is_array($PRODUCTS) && count($PRODUCTS) > 0}
+            <p class="text-body-secondary mb-3">{$smarty.const.TEXT_RECLAMATION_SELECT_PRODUCTS}</p>
+
+            {foreach name=aussen item=order_data from=$PRODUCTS}
+
+              {* ── MRH: PFLANZEN – Ausgegraut, nicht waehlbar ── *}
+              {if $order_data.PRODUCT_BLOCKED}
+                <div class="card mb-3 border-danger bg-light">
+                  <div class="card-body">
+                    <div class="d-flex align-items-start">
+                      <span class="fa-solid fa-ban text-danger me-3 mt-1" style="font-size:1.5rem;"></span>
+                      <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">{$order_data.PRODUCTS_NAME}</h6>
+                        {if $order_data.PRODUCTS_MODEL}
+                          <small class="text-muted">{$smarty.const.HEADER_MODEL}: {$order_data.PRODUCTS_MODEL}</small><br>
+                        {/if}
+                        <span class="badge bg-danger mt-2"><span class="fa-solid fa-leaf me-1"></span> {$smarty.const.TEXT_RECLAMATION_PLANT_EXCLUDED}</span>
+                        <p class="small text-muted mt-1 mb-0">
+                          <span class="fa-solid fa-circle-info me-1"></span>
+                          {$smarty.const.TEXT_RECLAMATION_PLANT_EXCLUDED_INFO}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              {* ── MRH: ZUBEHOER ABGELAUFEN – Gewaehrleistung abgelaufen ── *}
+              {elseif $order_data.PRODUCT_EXPIRED}
+                <div class="card mb-3 border-secondary bg-light">
+                  <div class="card-body">
+                    <div class="d-flex align-items-start">
+                      <span class="fa-solid fa-clock text-secondary me-3 mt-1" style="font-size:1.5rem;"></span>
+                      <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">{$order_data.PRODUCTS_NAME}</h6>
+                        {if $order_data.PRODUCTS_MODEL}
+                          <small class="text-muted">{$smarty.const.HEADER_MODEL}: {$order_data.PRODUCTS_MODEL}</small><br>
+                        {/if}
+                        <span class="badge bg-secondary mt-2"><span class="fa-solid fa-hourglass-end me-1"></span> {$smarty.const.TEXT_RECLAMATION_WARRANTY_EXPIRED}</span>
+                        <p class="small text-muted mt-1 mb-0">
+                          <span class="fa-solid fa-circle-info me-1"></span>
+                          {$smarty.const.TEXT_RECLAMATION_WARRANTY_EXPIRED_INFO}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              {* ── MRH: SAMEN – Kulanz-Reklamation mit Fragen ── *}
+              {elseif $order_data.PRODUCT_IS_SEED}
+                <div class="card mb-3 border-warning" id="product_card_{$order_data.ORDERS_PRODUCTS_ID}">
+                  <div class="card-header bg-warning bg-opacity-10">
+                    <div class="form-check">
+                      <input class="form-check-input product-checkbox" type="checkbox" name="reclaim_product[{$order_data.ORDERS_PRODUCTS_ID}]" value="1" id="chk_{$order_data.ORDERS_PRODUCTS_ID}" onchange="toggleProductDetails(this, {$order_data.ORDERS_PRODUCTS_ID})">
+                      <label class="form-check-label fw-bold" for="chk_{$order_data.ORDERS_PRODUCTS_ID}">
+                        {$order_data.PRODUCTS_NAME}
+                      </label>
+                      {if $order_data.PRODUCTS_MODEL}
+                        <small class="text-body-secondary ms-2">{$smarty.const.HEADER_MODEL}: {$order_data.PRODUCTS_MODEL}</small>
+                      {/if}
+                      <span class="badge bg-warning text-dark ms-2"><span class="fa-solid fa-seedling me-1"></span> {$smarty.const.TEXT_RECLAMATION_SEED_BADGE}</span>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    {* Kulanz-Hinweis *}
+                    <div class="alert alert-warning mb-3">
+                      <span class="fa-solid fa-seedling me-1"></span>
+                      <strong>{$smarty.const.TEXT_RECLAMATION_SEED_KULANZ_TITLE}</strong><br>
+                      <small>{$smarty.const.TEXT_RECLAMATION_SEED_KULANZ_INFO}</small>
+                    </div>
+
+                    {* Detail-Felder (anfangs versteckt) *}
+                    <div class="seed-details d-none" id="details_{$order_data.ORDERS_PRODUCTS_ID}">
+                      {* Menge *}
+                      <div class="row mb-3">
+                        <div class="col-md-4">
+                          <label class="form-label">{$smarty.const.TEXT_RECLAMATION_QTY_LABEL}</label>
+                          <input type="number" class="form-control" name="reclaim_qty_{$order_data.ORDERS_PRODUCTS_ID}" value="1" min="1" max="{$order_data.PRODUCTS_QUANTITY}">
+                          <div class="form-text">{$smarty.const.TEXT_RECLAMATION_QTY_MAX} {$order_data.PRODUCTS_QUANTITY}</div>
+                        </div>
+                      </div>
+
+                      {* Reklamationsgrund *}
+                      <div class="mb-3">
+                        <label class="form-label fw-semibold">{$smarty.const.TEXT_RECLAMATION_REASON_LABEL} *</label>
+                        <select class="form-select seed-reason-select" name="reason_{$order_data.ORDERS_PRODUCTS_ID}" id="reason_{$order_data.ORDERS_PRODUCTS_ID}" onchange="toggleSeedQuestions(this, {$order_data.ORDERS_PRODUCTS_ID})" required>
+                          <option value="">{$smarty.const.TEXT_RECLAMATION_REASON_SELECT}</option>
+                          <option value="not_germinated">{$smarty.const.TEXT_RECLAMATION_SEED_NOT_GERMINATED}</option>
+                          <option value="damaged_delivery">{$smarty.const.TEXT_RECLAMATION_SEED_DAMAGED}</option>
+                          <option value="wrong_strain">{$smarty.const.TEXT_RECLAMATION_SEED_WRONG_STRAIN}</option>
+                          <option value="other">{$smarty.const.TEXT_RECLAMATION_REASON_OTHER}</option>
+                        </select>
+                      </div>
+
+                      {* === Dynamische Fragen: Nicht gekeimt === *}
+                      <div class="seed-questions d-none" id="q_not_germinated_{$order_data.ORDERS_PRODUCTS_ID}">
+                        <div class="card bg-light mb-3">
+                          <div class="card-body">
+                            <h6 class="card-title"><span class="fa-solid fa-clipboard-question me-1"></span> {$smarty.const.TEXT_RECLAMATION_SEED_QUESTIONS_TITLE}</h6>
+                            <div class="row g-3">
+                              <div class="col-md-6">
+                                <label class="form-label">{$smarty.const.TEXT_RECLAMATION_SEED_GERM_METHOD} *</label>
+                                <select class="form-select" name="seed_germ_method_{$order_data.ORDERS_PRODUCTS_ID}">
+                                  <option value="">{$smarty.const.TEXT_RECLAMATION_REASON_SELECT}</option>
+                                  <option value="paper_towel">{$smarty.const.TEXT_RECLAMATION_SEED_GERM_PAPER}</option>
+                                  <option value="direct_soil">{$smarty.const.TEXT_RECLAMATION_SEED_GERM_SOIL}</option>
+                                  <option value="jiffy">{$smarty.const.TEXT_RECLAMATION_SEED_GERM_JIFFY}</option>
+                                  <option value="rockwool">{$smarty.const.TEXT_RECLAMATION_SEED_GERM_ROCKWOOL}</option>
+                                  <option value="water_glass">{$smarty.const.TEXT_RECLAMATION_SEED_GERM_WATER}</option>
+                                  <option value="other">{$smarty.const.TEXT_RECLAMATION_REASON_OTHER}</option>
+                                </select>
+                              </div>
+                              <div class="col-md-6">
+                                <label class="form-label">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP} *</label>
+                                <select class="form-select" name="seed_temp_{$order_data.ORDERS_PRODUCTS_ID}">
+                                  <option value="">{$smarty.const.TEXT_RECLAMATION_REASON_SELECT}</option>
+                                  <option value="under_18">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_UNDER18}</option>
+                                  <option value="18_22">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_18_22}</option>
+                                  <option value="22_26">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_22_26}</option>
+                                  <option value="over_26">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_OVER26}</option>
+                                  <option value="unknown">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_UNKNOWN}</option>
+                                </select>
+                              </div>
+                              <div class="col-md-6">
+                                <label class="form-label">{$smarty.const.TEXT_RECLAMATION_SEED_DAYS} *</label>
+                                <select class="form-select" name="seed_days_{$order_data.ORDERS_PRODUCTS_ID}">
+                                  <option value="">{$smarty.const.TEXT_RECLAMATION_REASON_SELECT}</option>
+                                  <option value="1_3">{$smarty.const.TEXT_RECLAMATION_SEED_DAYS_1_3}</option>
+                                  <option value="4_7">{$smarty.const.TEXT_RECLAMATION_SEED_DAYS_4_7}</option>
+                                  <option value="8_14">{$smarty.const.TEXT_RECLAMATION_SEED_DAYS_8_14}</option>
+                                  <option value="over_14">{$smarty.const.TEXT_RECLAMATION_SEED_DAYS_OVER14}</option>
+                                </select>
+                              </div>
+                              <div class="col-md-6">
+                                <label class="form-label">{$smarty.const.TEXT_RECLAMATION_SEED_COUNT} *</label>
+                                <input type="number" class="form-control" name="seed_count_{$order_data.ORDERS_PRODUCTS_ID}" min="1" max="100" placeholder="z.B. 3">
+                              </div>
+                              <div class="col-12">
+                                <div class="form-check">
+                                  <input class="form-check-input" type="checkbox" name="seed_stored_{$order_data.ORDERS_PRODUCTS_ID}" value="1" id="stored_{$order_data.ORDERS_PRODUCTS_ID}">
+                                  <label class="form-check-label" for="stored_{$order_data.ORDERS_PRODUCTS_ID}">
+                                    {$smarty.const.TEXT_RECLAMATION_SEED_STORED}
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {* === Dynamische Fragen: Falsche Sorte === *}
+                      <div class="seed-questions d-none" id="q_wrong_strain_{$order_data.ORDERS_PRODUCTS_ID}">
+                        <div class="card bg-light mb-3">
+                          <div class="card-body">
+                            <div class="row g-3">
+                              <div class="col-md-6">
+                                <label class="form-label">{$smarty.const.TEXT_RECLAMATION_SEED_EXPECTED} *</label>
+                                <input type="text" class="form-control" name="seed_expected_{$order_data.ORDERS_PRODUCTS_ID}" placeholder="{$smarty.const.TEXT_RECLAMATION_SEED_EXPECTED_PH}">
+                              </div>
+                              <div class="col-md-6">
+                                <label class="form-label">{$smarty.const.TEXT_RECLAMATION_SEED_RECEIVED} *</label>
+                                <input type="text" class="form-control" name="seed_received_{$order_data.ORDERS_PRODUCTS_ID}" placeholder="{$smarty.const.TEXT_RECLAMATION_SEED_RECEIVED_PH}">
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {* Beschreibung *}
+                      <div class="mb-3">
+                        <label class="form-label">{$smarty.const.TEXT_RECLAMATION_DESCRIPTION_LABEL} *</label>
+                        <textarea class="form-control" name="description_{$order_data.ORDERS_PRODUCTS_ID}" rows="3" maxlength="2000" placeholder="{$smarty.const.TEXT_RECLAMATION_DESCRIPTION_PH}"></textarea>
+                        <div class="form-text">{$smarty.const.TEXT_RECLAMATION_DESCRIPTION_HINT}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              {* ── STANDARD: Normales Zubehoer ── *}
+              {else}
+                <div class="card mb-3" id="product_card_{$order_data.ORDERS_PRODUCTS_ID}">
+                  <div class="card-header">
+                    <div class="form-check">
+                      <input class="form-check-input product-checkbox" type="checkbox" name="reclaim_product[{$order_data.ORDERS_PRODUCTS_ID}]" value="1" id="chk_{$order_data.ORDERS_PRODUCTS_ID}" onchange="toggleProductDetails(this, {$order_data.ORDERS_PRODUCTS_ID})">
+                      <label class="form-check-label fw-bold" for="chk_{$order_data.ORDERS_PRODUCTS_ID}">
+                        {$order_data.PRODUCTS_NAME}
+                      </label>
+                      {if $order_data.PRODUCTS_MODEL}
+                        <small class="text-body-secondary ms-2">{$smarty.const.HEADER_MODEL}: {$order_data.PRODUCTS_MODEL}</small>
+                      {/if}
+                      <span class="badge bg-secondary ms-2">{$smarty.const.TEXT_RECLAMATION_ACCESSORY_BADGE}</span>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    {if count($order_data.PRODUCTS_ATTRIBUTES) > 0}
+                      <ul class="list-unstyled mb-2 ms-2">
+                        {foreach name=inner item=attributes_data from=$order_data.PRODUCTS_ATTRIBUTES}
+                          <li class="small"><strong>{$attributes_data.OPTIONS_NAME}</strong>: {$attributes_data.VALUES_NAME}</li>
+                        {/foreach}
+                      </ul>
+                    {/if}
+                    <div class="small text-body-secondary mb-3">
+                      {$smarty.const.TEXT_RECLAMATION_PRICE}: {$order_data.PRODUCTS_PRICE} | {$smarty.const.TEXT_RECLAMATION_QTY_ORDERED}: {$order_data.PRODUCTS_QUANTITY}
+                    </div>
+
+                    {* Detail-Felder (anfangs versteckt) *}
+                    <div class="product-details d-none" id="details_{$order_data.ORDERS_PRODUCTS_ID}">
+                      {* Menge *}
+                      <div class="row mb-3">
+                        <div class="col-md-4">
+                          <label class="form-label">{$smarty.const.TEXT_RECLAMATION_QTY_LABEL}</label>
+                          <input type="number" class="form-control" name="reclaim_qty_{$order_data.ORDERS_PRODUCTS_ID}" value="1" min="1" max="{$order_data.PRODUCTS_QUANTITY}">
+                          <div class="form-text">{$smarty.const.TEXT_RECLAMATION_QTY_MAX} {$order_data.PRODUCTS_QUANTITY}</div>
+                        </div>
+                      </div>
+
+                      {* Reklamationsgrund *}
+                      <div class="mb-3">
+                        <label class="form-label fw-semibold">{$smarty.const.TEXT_RECLAMATION_REASON_LABEL} *</label>
+                        <select class="form-select" name="reason_{$order_data.ORDERS_PRODUCTS_ID}" required>
+                          <option value="">{$smarty.const.TEXT_RECLAMATION_REASON_SELECT}</option>
+                          <option value="transport_damage">{$smarty.const.TEXT_RECLAMATION_REASON_TRANSPORT}</option>
+                          <option value="wrong_product">{$smarty.const.TEXT_RECLAMATION_REASON_WRONG}</option>
+                          <option value="incomplete">{$smarty.const.TEXT_RECLAMATION_REASON_INCOMPLETE}</option>
+                          <option value="quality_defect">{$smarty.const.TEXT_RECLAMATION_REASON_QUALITY}</option>
+                          <option value="packaging_damaged">{$smarty.const.TEXT_RECLAMATION_REASON_PACKAGING}</option>
+                          <option value="other">{$smarty.const.TEXT_RECLAMATION_REASON_OTHER}</option>
+                        </select>
+                      </div>
+
+                      {* Beschreibung *}
+                      <div class="mb-0">
+                        <label class="form-label">{$smarty.const.TEXT_RECLAMATION_DESCRIPTION_LABEL} *</label>
+                        <textarea class="form-control" name="description_{$order_data.ORDERS_PRODUCTS_ID}" rows="3" maxlength="2000" placeholder="{$smarty.const.TEXT_RECLAMATION_DESCRIPTION_PH}"></textarea>
+                        <div class="form-text">{$smarty.const.TEXT_RECLAMATION_DESCRIPTION_HINT}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+
+            {/foreach}
+
+            {* === Bildupload-Bereich === *}
+            <div class="card mt-4 mb-3">
+              <div class="card-header">
+                <h6 class="mb-0"><span class="fa-solid fa-camera me-2"></span>{$smarty.const.TEXT_RECLAMATION_UPLOAD_HEADING}</h6>
+              </div>
+              <div class="card-body">
+                <p class="text-body-secondary small">{$smarty.const.TEXT_RECLAMATION_UPLOAD_INFO}</p>
+                
+                <div class="mb-3">
+                  <input type="file" class="form-control" name="reclamation_images[]" id="reclamation_images" multiple accept="image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp" onchange="previewImages(this)">
+                  <div class="form-text">{$smarty.const.TEXT_RECLAMATION_UPLOAD_HINT}</div>
+                </div>
+
+                {* Vorschau-Bereich *}
+                <div id="image_preview" class="d-flex flex-wrap gap-2 mb-3"></div>
+
+                {* Bildrechte-Checkbox *}
+                <div class="form-check mt-3">
+                  <input class="form-check-input" type="checkbox" name="image_rights" value="1" id="image_rights">
+                  <label class="form-check-label small" for="image_rights">
+                    {$smarty.const.TEXT_RECLAMATION_IMAGE_RIGHTS}
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-between mt-4">
+              {if isset($BUTTON_BACK)}
+                <div>{$BUTTON_BACK}</div>
+              {/if}
+              {if isset($BUTTON_SUBMIT)}
+                <div class="ms-auto">{$BUTTON_SUBMIT}</div>
+              {/if}
+            </div>
+          {else}
+            <div class="alert alert-warning">
+              <span class="fa-solid fa-circle-info"></span> {$smarty.const.TEXT_RECLAMATION_NO_PRODUCTS}
+            </div>
+          {/if}
+
+        {$FORM_END}
+
+      {elseif $FORM_TYPE == 'success'}
+        {* === Erfolgsseite === *}
+        <div class="alert alert-success">
+          <span class="fa-solid fa-circle-check"></span> {$smarty.const.TEXT_RECLAMATION_SUCCESS}
+        </div>
+
+        {if isset($RECL_PRODUCTS) && is_array($RECL_PRODUCTS) && count($RECL_PRODUCTS) > 0}
+          <p class="text-body-secondary mb-3">{$smarty.const.TEXT_RECLAMATION_SUCCESS_SUMMARY}</p>
+
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>{$smarty.const.HEADER_ARTICLE}</th>
+                  <th style="width:80px;" class="text-center">{$smarty.const.HEADER_QTY}</th>
+                  <th>{$smarty.const.TEXT_RECLAMATION_REASON_LABEL}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {foreach name=aussen item=rp from=$RECL_PRODUCTS}
+                  <tr>
+                    <td>
+                      <strong>{$rp.PRODUCTS_NAME}</strong>
+                      {if $rp.PRODUCTS_MODEL}
+                        <br><small class="text-body-secondary">{$smarty.const.HEADER_MODEL}: {$rp.PRODUCTS_MODEL}</small>
+                      {/if}
+                      {if $rp.PRODUCT_CATEGORY == 'seed'}
+                        <span class="badge bg-warning text-dark ms-1"><span class="fa-solid fa-seedling"></span></span>
+                      {/if}
+                    </td>
+                    <td class="text-center">{$rp.PRODUCTS_QUANTITY}</td>
+                    <td>{$rp.RECLAMATION_REASON}</td>
+                  </tr>
+                {/foreach}
+              </tbody>
+            </table>
+          </div>
+
+          {* Hochgeladene Bilder anzeigen *}
+          {if isset($RECL_IMAGES) && is_array($RECL_IMAGES) && count($RECL_IMAGES) > 0}
+            <div class="card mt-3">
+              <div class="card-body">
+                <h6 class="card-title"><span class="fa-solid fa-images me-2"></span>{$smarty.const.TEXT_RECLAMATION_UPLOADED_IMAGES}</h6>
+                <div class="d-flex flex-wrap gap-2">
+                  {foreach name=imgs item=img from=$RECL_IMAGES}
+                    <a href="{$img.IMAGE_PATH}" target="_blank">
+                      <img src="{$img.IMAGE_PATH}" alt="{$img.IMAGE_NAME}" style="max-height:100px;border-radius:4px;border:1px solid #dee2e6;">
+                    </a>
+                  {/foreach}
+                </div>
+              </div>
+            </div>
+          {/if}
+        {/if}
+
+        <div class="text-end mt-4">
+          {$BUTTON_CONTINUE}
+        </div>
+      {/if}
+
+    </div>
+  </div>
+</div>
+
+{* === JavaScript fuer dynamische Felder und Bildvorschau === *}
+<script>
+function toggleProductDetails(checkbox, opId) {
+  var details = document.getElementById('details_' + opId);
+  if (details) {
+    if (checkbox.checked) {
+      details.classList.remove('d-none');
+    } else {
+      details.classList.add('d-none');
+    }
+  }
+}
+
+function toggleSeedQuestions(select, opId) {
+  // Alle Fragen-Bloecke verstecken
+  var allQuestions = document.querySelectorAll('#product_card_' + opId + ' .seed-questions');
+  for (var i = 0; i < allQuestions.length; i++) {
+    allQuestions[i].classList.add('d-none');
+  }
+  
+  var val = select.value;
+  if (val === 'not_germinated') {
+    var el = document.getElementById('q_not_germinated_' + opId);
+    if (el) el.classList.remove('d-none');
+  } else if (val === 'wrong_strain') {
+    var el = document.getElementById('q_wrong_strain_' + opId);
+    if (el) el.classList.remove('d-none');
+  }
+}
+
+function previewImages(input) {
+  var preview = document.getElementById('image_preview');
+  preview.innerHTML = '';
+  
+  if (input.files && input.files.length > 0) {
+    var maxFiles = Math.min(input.files.length, 5);
+    for (var i = 0; i < maxFiles; i++) {
+      var file = input.files[i];
+      if (file.type.match('image.*')) {
+        var reader = new FileReader();
+        reader.onload = (function(f) {
+          return function(e) {
+            var div = document.createElement('div');
+            div.style.cssText = 'position:relative;display:inline-block;';
+            div.innerHTML = '<img src="' + e.target.result + '" style="max-height:80px;border-radius:4px;border:1px solid #dee2e6;">' +
+                            '<small class="d-block text-center text-muted" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + f.name + '</small>';
+            preview.appendChild(div);
+          };
+        })(file);
+        reader.readAsDataURL(file);
+      }
+    }
+    
+    if (input.files.length > 5) {
+      var warn = document.createElement('div');
+      warn.className = 'alert alert-warning mt-2 w-100';
+      warn.textContent = '{$smarty.const.TEXT_RECLAMATION_UPLOAD_MAX_WARNING}';
+      preview.appendChild(warn);
+    }
+  }
+}
+</script>

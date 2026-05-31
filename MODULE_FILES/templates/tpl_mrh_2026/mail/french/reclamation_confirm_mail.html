@@ -1,0 +1,32 @@
+<!-- MRH 2026: Module de r&eacute;clamation – E-mail de confirmation client (Fran&ccedil;ais) -->
+<table width="100%" cellpadding="0" cellspacing="0" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;">
+  <tr>
+    <td style="padding:20px;background:#198754;color:#fff;text-align:center;">
+      <h2 style="margin:0;">&#10003; Confirmation de votre r&eacute;clamation</h2>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:20px;">
+      <p>Cher/Ch&egrave;re {$customers_name},</p>
+      
+      <p>Merci pour votre r&eacute;clamation concernant la commande <strong>#{$orders_id}</strong>. Nous avons bien re&ccedil;u votre demande.</p>
+      
+      <div style="background:#d4edda;border:1px solid #c3e6cb;border-radius:4px;padding:15px;margin:15px 0;">
+        <strong>Votre r&eacute;clamation est actuellement examin&eacute;e par notre &eacute;quipe.</strong><br>
+        Nous reviendrons vers vous dans les meilleurs d&eacute;lais avec une solution.
+      </div>
+
+      <h3 style="color:#198754;border-bottom:2px solid #198754;padding-bottom:5px;">R&eacute;sum&eacute;</h3>
+      {$products_table}
+
+      <p style="margin-top:20px;color:#6c757d;font-size:13px;">
+        <strong>Remarque :</strong> Veuillez ne pas r&eacute;pondre directement &agrave; cet e-mail. Pour toute question, veuillez contacter notre service client.
+      </p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:15px;background:#f8f9fa;text-align:center;font-size:12px;color:#6c757d;">
+      {$STORE_NAME} &ndash; {$STORE_URL}
+    </td>
+  </tr>
+</table>

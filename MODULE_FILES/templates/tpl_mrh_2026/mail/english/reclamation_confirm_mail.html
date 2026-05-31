@@ -1,0 +1,32 @@
+<!-- MRH 2026: Reclamation Module – Customer Confirmation Email (English) -->
+<table width="100%" cellpadding="0" cellspacing="0" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;">
+  <tr>
+    <td style="padding:20px;background:#198754;color:#fff;text-align:center;">
+      <h2 style="margin:0;">&#10003; Confirmation of Your Complaint</h2>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:20px;">
+      <p>Dear {$customers_name},</p>
+      
+      <p>Thank you for your complaint regarding order <strong>#{$orders_id}</strong>. We have successfully received your request.</p>
+      
+      <div style="background:#d4edda;border:1px solid #c3e6cb;border-radius:4px;padding:15px;margin:15px 0;">
+        <strong>Your complaint is now being reviewed by our team.</strong><br>
+        We will get back to you as soon as possible with a solution.
+      </div>
+
+      <h3 style="color:#198754;border-bottom:2px solid #198754;padding-bottom:5px;">Summary</h3>
+      {$products_table}
+
+      <p style="margin-top:20px;color:#6c757d;font-size:13px;">
+        <strong>Note:</strong> Please do not reply directly to this email. For any questions, please contact our customer service.
+      </p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:15px;background:#f8f9fa;text-align:center;font-size:12px;color:#6c757d;">
+      {$STORE_NAME} &ndash; {$STORE_URL}
+    </td>
+  </tr>
+</table>

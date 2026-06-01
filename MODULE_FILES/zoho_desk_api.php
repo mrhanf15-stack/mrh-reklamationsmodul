@@ -201,6 +201,7 @@ switch ($action) {
                 'id'               => $thread['id'],
                 'type'             => 'thread',
                 'direction'        => isset($thread['direction']) ? $thread['direction'] : 'in',
+                'isDescriptionThread' => !empty($thread['isDescriptionThread']),
                 'fromEmailAddress' => isset($thread_detail['fromEmailAddress']) ? $thread_detail['fromEmailAddress'] : '',
                 'to'               => isset($thread_detail['to']) ? $thread_detail['to'] : '',
                 'createdTime'      => isset($thread['createdTime']) ? $thread['createdTime'] : '',

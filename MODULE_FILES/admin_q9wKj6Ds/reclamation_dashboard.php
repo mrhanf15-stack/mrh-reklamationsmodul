@@ -283,26 +283,27 @@
           curl_close($ch);
           $conv_data = json_decode($conv_resp, true);
           
-          if (isset($conv_data['conversations'])) {
-            // Zaehle eingehende Nachrichten (direction=in) nach dem letzten bekannten Thread
+          if (isset($conv_data['conversations']) && !empty($conv_data['conversations'])) {
+            // Conversations kommen neueste zuerst von Zoho
+            // Zaehle eingehende Nachrichten die NACH dem letzten ausgehenden Thread kamen
             $unread = 0;
-            $last_known = $t['zoho_last_thread_id'];
-            $found_last = empty($last_known); // Wenn kein letzter bekannt, alle zaehlen
-            $newest_thread_id = '';
+            $newest_thread_id = $conv_data['conversations'][0]['id'] ?? '';
             
             foreach ($conv_data['conversations'] as $thread) {
-              if (empty($newest_thread_id)) $newest_thread_id = $thread['id'];
-              if (!$found_last && $thread['id'] == $last_known) {
-                $found_last = true;
-                continue;
+              // Sobald wir einen ausgehenden Thread (Support-Antwort) finden, stoppen
+              if (isset($thread['direction']) && $thread['direction'] == 'out') {
+                break;
               }
-              if ($found_last && isset($thread['direction']) && $thread['direction'] == 'in') {
+              // Nur eingehende Nachrichten zaehlen die KEINE Description-Threads sind
+              if (isset($thread['direction']) && $thread['direction'] == 'in') {
+                // isDescriptionThread ueberspringen (das ist die Ticket-Beschreibung, keine Antwort)
+                if (!empty($thread['isDescriptionThread'])) continue;
                 $unread++;
               }
             }
             
             // Update DB
-            if ($unread != (int)$t['zoho_unread_count'] || 0) {
+            if ($unread != (int)($t['zoho_unread_count'] ?? 0)) {
               xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET zoho_unread_count = '" . (int)$unread . "' WHERE reclamation_id = '" . (int)$t['reclamation_id'] . "'");
             }
             $unread_map[(int)$t['reclamation_id']] = $unread;

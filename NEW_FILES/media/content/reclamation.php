@@ -332,6 +332,7 @@
                   'email_address' => $email_address,
                   'orders' => xtc_db_fetch_array($orders_query),
                 );
+                session_write_close();
                 xtc_redirect(xtc_href_link(basename($PHP_SELF), xtc_get_all_get_params(array('action', 'oID')).'action=products&oID='.(int)$orders_id, 'SSL'));
               }
             }

@@ -340,21 +340,27 @@ switch ($action) {
         $ticket_data = [
             'subject'     => $subject,
             'description' => $description,
-            'email'       => $email,
             'status'      => 'Open',
             'priority'    => 'Medium',
             'channel'     => 'Email',
         ];
 
-        // Contact suchen
+        // Contact suchen oder erstellen
         if (!empty($email)) {
             $contact = $zoho->searchContactByEmail($email);
             if (!empty($contact) && isset($contact[0]['id'])) {
                 $ticket_data['contactId'] = $contact[0]['id'];
+            } else {
+                // Kein Contact gefunden - lastName ist Pflichtfeld bei Zoho
+                $last_name = !empty($contact_name) ? $contact_name : explode('@', $email)[0];
+                $ticket_data['contact'] = [
+                    'lastName' => $last_name,
+                    'email'    => $email,
+                ];
             }
         }
 
-        // Department setzen
+        // Department setzen (Pflichtfeld!)
         if (!empty($department_id)) {
             $ticket_data['departmentId'] = $department_id;
         } else {

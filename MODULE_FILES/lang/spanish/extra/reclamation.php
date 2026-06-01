@@ -121,3 +121,7 @@
 
   // Botones
   define('IMAGE_BUTTON_RECLAMATION', 'Enviar reclamaci&oacute;n');
+
+  // Bot&oacute;n historial de pedidos
+  define('TEXT_RECLAMATION_BTN_SUBMIT', 'Presentar reclamaci&oacute;n');
+  define('TEXT_RECLAMATION_BTN_EXPIRED', 'Plazo de reclamaci&oacute;n expirado (60 d&iacute;as)');

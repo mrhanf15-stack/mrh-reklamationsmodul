@@ -122,3 +122,7 @@
 
   // Buttons
   define('IMAGE_BUTTON_RECLAMATION', 'Reklamation absenden');
+
+  // Bestellhistorie Button
+  define('TEXT_RECLAMATION_BTN_SUBMIT', 'Reklamation einreichen');
+  define('TEXT_RECLAMATION_BTN_EXPIRED', 'Reklamationsfrist abgelaufen (60 Tage)');

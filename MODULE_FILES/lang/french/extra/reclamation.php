@@ -121,3 +121,7 @@
 
   // Boutons
   define('IMAGE_BUTTON_RECLAMATION', 'Soumettre la r&eacute;clamation');
+
+  // Bouton historique commandes
+  define('TEXT_RECLAMATION_BTN_SUBMIT', 'Soumettre une r&eacute;clamation');
+  define('TEXT_RECLAMATION_BTN_EXPIRED', 'D&eacute;lai de r&eacute;clamation expir&eacute; (60 jours)');

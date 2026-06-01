@@ -60,8 +60,42 @@
 
     $privacy = isset($_POST['privacy']) && $_POST['privacy'] == 'privacy' ? true : false;
 
-    // === Auto-Login fuer eingeloggte Kunden aus Bestellhistorie ===
-    if (isset($_GET['auto']) && $_GET['auto'] == '1' && isset($_GET['oID']) && isset($_SESSION['customer_id'])) {
+    // === Auto-Start via Session (sicherer Weg ueber reklamation_start.php) ===
+    if (isset($_GET['auto']) && $_GET['auto'] == '1'
+        && isset($_SESSION['reclamation_auto'])
+        && is_array($_SESSION['reclamation_auto'])
+        && !empty($_SESSION['reclamation_auto']['validated'])
+        && isset($_SESSION['customer_id'])
+    ) {
+      $auto_data = $_SESSION['reclamation_auto'];
+      // Timestamp pruefen: max. 5 Minuten gueltig
+      $auto_valid = (isset($auto_data['timestamp']) && (time() - $auto_data['timestamp']) < 300);
+      
+      if ($auto_valid && !empty($auto_data['orders_id'])) {
+        $auto_oid = (int)$auto_data['orders_id'];
+        // Bestelldaten laden (nochmal pruefen ob Kunde stimmt)
+        $auto_order_q = xtc_db_query("SELECT * FROM " . TABLE_ORDERS . " WHERE orders_id = '" . $auto_oid . "' AND customers_id = '" . (int)$_SESSION['customer_id'] . "'");
+        if (xtc_db_num_rows($auto_order_q) > 0) {
+          $auto_order = xtc_db_fetch_array($auto_order_q);
+          // Direkt zur Produktwahl (Validierung wurde bereits in reklamation_start.php gemacht)
+          $_SESSION['reclamation'][$auto_oid] = array(
+            'valid' => true,
+            'success' => false,
+            'orders_id' => $auto_oid,
+            'email_address' => $auto_data['email'],
+            'orders' => $auto_order,
+          );
+          $action = 'products';
+          $_GET['action'] = 'products';
+          $_GET['oID'] = $auto_oid;
+          $_REQUEST['oID'] = $auto_oid;
+        }
+      }
+      // Session-Daten nach Verwendung loeschen (Einmal-Verwendung)
+      unset($_SESSION['reclamation_auto']);
+    }
+    // === Fallback: Auto-Login via GET-Parameter (alter Weg, fuer Abwaertskompatibilitaet) ===
+    elseif (isset($_GET['auto']) && $_GET['auto'] == '1' && isset($_GET['oID']) && isset($_SESSION['customer_id'])) {
       $auto_oid = (int)$_GET['oID'];
       // Pruefen ob Bestellung dem eingeloggten Kunden gehoert
       $auto_order_q = xtc_db_query("SELECT * FROM " . TABLE_ORDERS . " WHERE orders_id = '" . $auto_oid . "' AND customers_id = '" . (int)$_SESSION['customer_id'] . "'");
@@ -89,6 +123,12 @@
           }
         }
       }
+    }
+    // === Fehlermeldung aus reklamation_start.php anzeigen ===
+    if (isset($_SESSION['reclamation_error'])) {
+      $error = true;
+      $error_message = $_SESSION['reclamation_error'];
+      unset($_SESSION['reclamation_error']);
     }
     
     if (!isset($smarty) || !is_object($smarty)) {

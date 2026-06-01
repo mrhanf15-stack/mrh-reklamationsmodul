@@ -7,6 +7,11 @@
  * - Mindestens 10 Tage seit Versand vergangen sind
  * - Maximal 60 Tage seit Bestelldatum
  * 
+ * Sicherheit:
+ * - Generiert einen Einmal-Token (CSRF-Schutz)
+ * - Token wird in $_SESSION['reclamation_tokens'][] gespeichert
+ * - Link zeigt auf reklamation_start.php (validiert Token + Bestellung)
+ * 
  * Pfad: includes/external/smarty/plugins/function.reclamation_btn.php
  */
 function smarty_function_reclamation_btn($params, $template) {
@@ -56,11 +61,30 @@ function smarty_function_reclamation_btn($params, $template) {
     }
   }
 
-  // Alles OK: Reklamations-Button anzeigen
+  // ============================================================
+  // Alles OK: CSRF-Token generieren und Button anzeigen
+  // ============================================================
+  
+  // Einmal-Token generieren (32 Zeichen hex)
+  $token = bin2hex(random_bytes(16));
+  
+  // Token in Session speichern (max. 10 Tokens gleichzeitig, aelteste entfernen)
+  if (!isset($_SESSION['reclamation_tokens']) || !is_array($_SESSION['reclamation_tokens'])) {
+    $_SESSION['reclamation_tokens'] = array();
+  }
+  // Maximal 10 Tokens behalten (FIFO)
+  if (count($_SESSION['reclamation_tokens']) >= 10) {
+    array_shift($_SESSION['reclamation_tokens']);
+  }
+  $_SESSION['reclamation_tokens'][] = $token;
+
+  // Button-Text
   $text = defined('TEXT_RECLAMATION_BTN_SUBMIT') ? TEXT_RECLAMATION_BTN_SUBMIT : 'Reklamation einreichen';
-  // Direkte SEO-URL (sprachunabhaengig, via .htaccess aufgeloest)
+  
+  // Link auf reklamation_start.php mit oID und Token
   $base = (defined('HTTPS_SERVER') ? rtrim(HTTPS_SERVER, '/') : 'https://mr-hanf.de');
-  $link = $base . '/info/reklamation-einreichen?oID=' . $orders_id . '&amp;auto=1';
+  $link = $base . '/reklamation_start.php?oID=' . $orders_id . '&amp;token=' . $token;
+  
   return '<a href="' . $link . '" class="btn btn-sm btn-outline-danger">
             <i class="fa-solid fa-triangle-exclamation me-1"></i> ' . $text . '
           </a>';

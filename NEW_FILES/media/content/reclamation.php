@@ -268,6 +268,7 @@
         $valid_params = array(
           'orders_id',
           'email_address',
+          'privacy',
         );
     
         // prepare variables

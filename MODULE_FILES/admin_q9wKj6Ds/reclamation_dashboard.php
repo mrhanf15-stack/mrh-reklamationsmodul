@@ -1286,7 +1286,7 @@
             var rows = document.querySelectorAll('tr[data-recl-id]');
             rows.forEach(function(row) {
               var reclId = parseInt(row.getAttribute('data-recl-id'));
-              var ticketCell = row.querySelectorAll('td')[5]; // 6. Spalte = Ticket
+              var ticketCell = row.querySelectorAll('td')[6]; // 7. Spalte = Ticket (Index 6)
               if (!ticketCell) return;
               
               var unreadCount = d.unread[reclId] || 0;

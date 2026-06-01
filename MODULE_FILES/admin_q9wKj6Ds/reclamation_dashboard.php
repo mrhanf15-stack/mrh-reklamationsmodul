@@ -136,7 +136,7 @@
   <meta charset="utf-8">
   <title>Reklamations-Dashboard | <?php echo STORE_NAME; ?></title>
   <?php
-    require(DIR_WS_INCLUDES . 'head_css.php');
+    require(DIR_WS_INCLUDES . 'head.php');
   ?>
   <style>
     .recl-stat-card { border-radius: 8px; padding: 15px; text-align: center; color: #fff; }

@@ -295,11 +295,7 @@
           }
         }
 
-        if (DISPLAY_PRIVACY_CHECK == 'true' && empty($privacy)) {
-          $messageStack->add('reclamation', ENTRY_PRIVACY_ERROR);
-          $error = true;
-        }
-        
+
 
         if ($error === false) {
           // E-Mail + Bestellnummer validieren (kein Name noetig)

@@ -55,6 +55,7 @@ $config_keys = [
     'MODULE_ZOHO_DESK_REFRESH_TOKEN',
     'MODULE_ZOHO_DESK_ORG_ID',
     'MODULE_ZOHO_DESK_FROM_EMAIL',
+    'MODULE_ZOHO_DESK_CHANNEL_EMAIL',
 ];
 $result = $db->query("SELECT configuration_key, configuration_value FROM configuration WHERE configuration_key IN ('" . implode("','", $config_keys) . "')");
 if ($result) {
@@ -250,10 +251,15 @@ switch ($action) {
             }
         }
 
-        // fromEmailAddress aus Konfiguration oder Standard
-        $from_email = !empty($zoho_config['MODULE_ZOHO_DESK_FROM_EMAIL']) 
-            ? $zoho_config['MODULE_ZOHO_DESK_FROM_EMAIL'] 
-            : '';
+        // fromEmailAddress aus Konfiguration - PFLICHTFELD bei Email-Channel!
+        $from_email = '';
+        if (!empty($zoho_config['MODULE_ZOHO_DESK_FROM_EMAIL'])) {
+            $from_email = $zoho_config['MODULE_ZOHO_DESK_FROM_EMAIL'];
+        } elseif (!empty($zoho_config['MODULE_ZOHO_DESK_CHANNEL_EMAIL'])) {
+            $from_email = $zoho_config['MODULE_ZOHO_DESK_CHANNEL_EMAIL'];
+        } else {
+            $from_email = 'info@mr-hanf.de'; // Fallback
+        }
 
         $reply_result = $zoho->sendReply($ticket_id, $to, $content, $from_email, $attachmentIds);
 

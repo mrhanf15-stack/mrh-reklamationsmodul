@@ -207,14 +207,14 @@
     .pagination-bar .active { background: #c0392b; color: #fff; border-color: #c0392b; }
     
     /* Modal */
-    .modal-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: none; }
-    .modal-backdrop.show { display: flex; align-items: center; justify-content: center; }
-    .modal-box { background: #fff; border-radius: 12px; max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-    .modal-box .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-    .modal-box .modal-header h5 { margin: 0; font-size: 1.1rem; color: #c0392b; }
-    .modal-box .modal-header .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #999; }
-    .modal-box .modal-header .close-btn:hover { color: #333; }
-    .modal-box .modal-body { padding: 1.5rem; }
+    .mrh-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.92); z-index: 99999; display: none; }
+    .mrh-overlay.show { display: flex; align-items: center; justify-content: center; }
+    .mrh-dialog { background: #fff; border-radius: 12px; max-width: 900px; width: 95%; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.4); position: relative; z-index: 100000; }
+    .mrh-dialog .mrh-dialog-head { padding: 1rem 1.5rem; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    .mrh-dialog .mrh-dialog-head h5 { margin: 0; font-size: 1.1rem; color: #c0392b; }
+    .mrh-dialog .mrh-dialog-head .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #999; }
+    .mrh-dialog .mrh-dialog-head .close-btn:hover { color: #333; }
+    .mrh-dialog .mrh-dialog-body { padding: 1.5rem; overflow-y: auto; flex: 1; }
     
     .content-wrap { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem; }
     
@@ -375,13 +375,13 @@
   </div><!-- /content-wrap -->
 
   <!-- Detail-Modal (custom, kein Bootstrap JS noetig) -->
-  <div class="modal-backdrop" id="detailModal">
-    <div class="modal-box">
-      <div class="modal-header">
+  <div class="mrh-overlay" id="detailModal">
+    <div class="mrh-dialog">
+      <div class="mrh-dialog-head">
         <h5><i class="fa-solid fa-triangle-exclamation"></i> Reklamation #<span id="modal-id"></span></h5>
         <button class="close-btn" onclick="closeModal()">&times;</button>
       </div>
-      <div class="modal-body" id="modal-body">
+      <div class="mrh-dialog-body" id="modal-body">
         <div style="text-align:center; padding:2rem;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#c0392b;"></i></div>
       </div>
     </div>
@@ -407,11 +407,21 @@
         }
       });
 
+    // Modal beim Laden an body anhängen (verhindert z-index/overflow Probleme durch Parent-Container)
+    (function() {
+      var modal = document.getElementById('detailModal');
+      if (modal && modal.parentNode !== document.body) {
+        document.body.appendChild(modal);
+      }
+    })();
+
     // Modal
     function showDetail(id) {
+      var modal = document.getElementById('detailModal');
       document.getElementById('modal-id').textContent = id;
       document.getElementById('modal-body').innerHTML = '<div style="text-align:center; padding:2rem;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#c0392b;"></i></div>';
-      document.getElementById('detailModal').classList.add('show');
+      modal.classList.add('show');
+      modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
       
       fetch(DASHBOARD_URL + '?ajax=get_detail&id=' + id)
@@ -426,7 +436,9 @@
     }
 
     function closeModal() {
-      document.getElementById('detailModal').classList.remove('show');
+      var modal = document.getElementById('detailModal');
+      modal.classList.remove('show');
+      modal.style.display = 'none';
       document.body.style.overflow = '';
     }
 

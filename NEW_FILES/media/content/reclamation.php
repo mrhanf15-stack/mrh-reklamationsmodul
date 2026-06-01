@@ -486,6 +486,43 @@
           $smarty->assign('tpl_path', HTTP_SERVER.DIR_WS_CATALOG.'templates/'.CURRENT_TEMPLATE.'/');    
           $smarty->assign('logo_path', HTTP_SERVER.DIR_WS_CATALOG.'templates/'.CURRENT_TEMPLATE.'/img/');
 
+          // Variablen fuer Admin-Mail-Template (Kleinbuchstaben wie im Template erwartet)
+          $smarty->assign('customers_name', $orders['customers_name']);
+          $smarty->assign('customers_email', $orders['customers_email_address']);
+          $smarty->assign('orders_id', $orders['orders_id']);
+          $smarty->assign('reclamation_id', $reclamation_id);
+          $smarty->assign('reclamation_date', date('d.m.Y H:i'));
+          $smarty->assign('ip_address', $_SERVER['REMOTE_ADDR']);
+
+          // Produkte-Tabelle als HTML fuer Mail generieren
+          $products_table_html = '';
+          foreach ($sql_products as $sp) {
+            $products_table_html .= '<tr>';
+            $products_table_html .= '<td style="border:1px solid #dee2e6;padding:8px;">' . (int)$sp['products_quantity'] . 'x</td>';
+            $products_table_html .= '<td style="border:1px solid #dee2e6;padding:8px;">' . htmlspecialchars($sp['products_name']) . '</td>';
+            $products_table_html .= '<td style="border:1px solid #dee2e6;padding:8px;">' . htmlspecialchars($sp['products_model']) . '</td>';
+            $products_table_html .= '<td style="border:1px solid #dee2e6;padding:8px;">' . htmlspecialchars($sp['reclamation_reason']) . '</td>';
+            $products_table_html .= '<td style="border:1px solid #dee2e6;padding:8px;">' . htmlspecialchars($sp['reclamation_description']) . '</td>';
+            $products_table_html .= '</tr>';
+          }
+          $products_table = '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dee2e6;border-collapse:collapse;margin:10px 0;">'
+            . '<tr style="background:#f8f9fa;"><th style="border:1px solid #dee2e6;padding:8px;text-align:left;">Stk.</th><th style="border:1px solid #dee2e6;padding:8px;text-align:left;">Produkt</th><th style="border:1px solid #dee2e6;padding:8px;text-align:left;">Art.-Nr.</th><th style="border:1px solid #dee2e6;padding:8px;text-align:left;">Grund</th><th style="border:1px solid #dee2e6;padding:8px;text-align:left;">Beschreibung</th></tr>'
+            . $products_table_html . '</table>';
+          $smarty->assign('products_table', $products_table);
+
+          // Bilder-Sektion fuer Mail
+          $images_section = '';
+          if (!empty($uploaded_images)) {
+            $images_section = '<h3 style="color:#dc3545;border-bottom:2px solid #dc3545;padding-bottom:5px;">Hochgeladene Bilder (' . count($uploaded_images) . ')</h3>';
+            $images_section .= '<p style="font-size:13px;color:#6c757d;">Die Bilder sind als Anhang beigefuegt.</p>';
+          }
+          $smarty->assign('images_section', $images_section);
+
+          // Admin-Link zum Dashboard
+          $admin_link = HTTP_SERVER . DIR_WS_CATALOG . 'admin_q9wKj6Ds/reclamation_dashboard.php';
+          $smarty->assign('admin_link', $admin_link);
+
+          // Auch Grossbuchstaben-Variablen fuer Confirm-Mail beibehalten
           $smarty->assign('NAME', $orders['customers_name']);
           $smarty->assign('EMAIL', $orders['customers_email_address']);
           $smarty->assign('ORDERS_ID', $orders['orders_id']);

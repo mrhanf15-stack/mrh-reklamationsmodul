@@ -58,7 +58,7 @@ function smarty_function_reclamation_btn($params, $template) {
 
   // Alles OK: Reklamations-Button anzeigen
   $text = defined('TEXT_RECLAMATION_BTN_SUBMIT') ? TEXT_RECLAMATION_BTN_SUBMIT : 'Reklamation einreichen';
-  $link = xtc_href_link('reklamation.html', 'oID=' . $orders_id . '&amp;auto=1', 'SSL');
+  $link = xtc_href_link('reclamation.php', 'oID=' . $orders_id . '&amp;auto=1', 'SSL');
   return '<a href="' . $link . '" class="btn btn-sm btn-outline-danger">
             <i class="fa-solid fa-triangle-exclamation me-1"></i> ' . $text . '
           </a>';

@@ -25,6 +25,20 @@
     ? HTTPS_SERVER . DIR_WS_ADMIN 
     : HTTP_SERVER . DIR_WS_ADMIN;
 
+  // === Self-Healing: Zoho-Spalten in orders_reclamation ===
+  $zoho_cols = array(
+    'zoho_ticket_id' => "ALTER TABLE `orders_reclamation` ADD COLUMN `zoho_ticket_id` VARCHAR(50) DEFAULT NULL AFTER `ip_address`",
+    'zoho_ticket_nr' => "ALTER TABLE `orders_reclamation` ADD COLUMN `zoho_ticket_nr` VARCHAR(50) DEFAULT NULL AFTER `zoho_ticket_id`",
+    'zoho_unread_count' => "ALTER TABLE `orders_reclamation` ADD COLUMN `zoho_unread_count` INT(11) DEFAULT 0 AFTER `zoho_ticket_nr`",
+    'zoho_last_thread_id' => "ALTER TABLE `orders_reclamation` ADD COLUMN `zoho_last_thread_id` VARCHAR(50) DEFAULT NULL AFTER `zoho_unread_count`",
+  );
+  foreach ($zoho_cols as $col => $sql) {
+    $check = xtc_db_query("SHOW COLUMNS FROM `orders_reclamation` LIKE '" . $col . "'");
+    if (xtc_db_num_rows($check) < 1) {
+      xtc_db_query($sql);
+    }
+  }
+
   // === AJAX-Endpunkte ===
   if (isset($_GET['ajax'])) {
     header('Content-Type: application/json; charset=utf-8');
@@ -37,12 +51,70 @@
         
         $allowed = array('open', 'in_progress', 'resolved', 'rejected', 'closed');
         if (in_array($new_status, $allowed)) {
+          // Pruefen ob vorher schon ein Ticket existiert
+          $prev_recl = xtc_db_fetch_array(xtc_db_query("SELECT reclamation_status, zoho_ticket_id, customers_email, customers_name, orders_id FROM " . TABLE_ORDERS_RECLAMATION . " WHERE reclamation_id = '" . $recl_id . "'"));
+          
           xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " 
                             SET reclamation_status = '" . xtc_db_input($new_status) . "',
                                 admin_comment = '" . xtc_db_input($comment) . "',
                                 admin_date = NOW()
                           WHERE reclamation_id = '" . $recl_id . "'");
-          echo json_encode(array('success' => true, 'message' => 'Status aktualisiert'));
+          
+          $response = array('success' => true, 'message' => 'Status aktualisiert');
+          
+          // === Auto-Ticket bei Wechsel zu 'in_progress' (nur wenn noch kein Ticket existiert) ===
+          if ($new_status == 'in_progress' && empty($prev_recl['zoho_ticket_id'])) {
+            // Standardisierte Bestaetigungs-Mail
+            $confirm_subject = 'Reklamation Bestellung #' . $prev_recl['orders_id'] . ' - Wir pruefen deinen Fall';
+            $confirm_body = 'Hallo ' . $prev_recl['customers_name'] . ",\n\n"
+              . "vielen Dank fuer deine Nachricht zu deiner Bestellung #" . $prev_recl['orders_id'] . ".\n\n"
+              . "Wir haben deine Reklamation erhalten und unsere Spezialisten pruefen den Fall. "
+              . "Du erhaeltst in Kuerze eine ausfuehrliche Antwort von uns.\n\n"
+              . "Bitte antworte einfach auf diese E-Mail, falls du weitere Informationen ergaenzen moechtest.\n\n"
+              . "Dein Mr. Hanf Team";
+            
+            // Zoho Ticket erstellen via interner API
+            $zoho_secret_q = xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = 'MODULE_ZOHO_DESK_CLIENT_SECRET'");
+            $zoho_secret_row = xtc_db_fetch_array($zoho_secret_q);
+            $zoho_token = hash_hmac('sha256', date('Y-m-d'), $zoho_secret_row['configuration_value'] ?? '');
+            
+            $catalog_url = (defined('HTTPS_CATALOG_SERVER') ? HTTPS_CATALOG_SERVER : HTTP_CATALOG_SERVER) . DIR_WS_CATALOG;
+            $zoho_api_url = $catalog_url . 'zoho_desk_api.php?action=create_ticket&token=' . $zoho_token;
+            
+            $post_data = http_build_query(array(
+              'subject' => $confirm_subject,
+              'description' => $confirm_body,
+              'email' => $prev_recl['customers_email'],
+              'contact_name' => $prev_recl['customers_name'],
+            ));
+            
+            $ch = curl_init($zoho_api_url);
+            curl_setopt_array($ch, array(
+              CURLOPT_RETURNTRANSFER => true,
+              CURLOPT_POST => true,
+              CURLOPT_POSTFIELDS => $post_data,
+              CURLOPT_TIMEOUT => 15,
+              CURLOPT_SSL_VERIFYPEER => false,
+            ));
+            $zoho_response = curl_exec($ch);
+            curl_close($ch);
+            
+            $zoho_data = json_decode($zoho_response, true);
+            if (isset($zoho_data['success']) && $zoho_data['success']) {
+              // Ticket-ID und Nummer in DB speichern
+              xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " 
+                              SET zoho_ticket_id = '" . xtc_db_input($zoho_data['ticket_id']) . "',
+                                  zoho_ticket_nr = '" . xtc_db_input($zoho_data['ticket_nr']) . "'
+                            WHERE reclamation_id = '" . $recl_id . "'");
+              $response['ticket_created'] = true;
+              $response['ticket_nr'] = $zoho_data['ticket_nr'];
+              $response['message'] = 'Status aktualisiert + Zoho Ticket #' . $zoho_data['ticket_nr'] . ' erstellt';
+            } else {
+              $response['ticket_error'] = isset($zoho_data['error']) ? $zoho_data['error'] : 'Unbekannter Fehler';
+            }
+          }
+          
+          echo json_encode($response);
         } else {
           echo json_encode(array('success' => false, 'message' => 'Ungueltiger Status'));
         }
@@ -108,10 +180,20 @@
         $system_prompt = "Du bist ein freundlicher Kundenservice-Mitarbeiter von Mr. Hanf (Cannabis Samen Shop). "
           . "Schreibe eine professionelle, empathische Antwort auf eine Kundenreklamation. "
           . "Verwende 'Du' als Anrede. Sei loesungsorientiert. "
-          . "Bei Samen-Reklamationen: Biete Kulanz an (Ersatzlieferung oder Gutschrift), "
-          . "weise darauf hin dass Keimung von vielen Faktoren abhaengt. "
-          . "Bei anderen Produkten: Biete Ersatz oder Rueckerstattung an. "
-          . "Halte die Antwort kurz (3-5 Saetze). Unterschreibe mit 'Dein Mr. Hanf Team'.";
+          . "Halte die Antwort kurz und praegnant. Unterschreibe mit 'Dein Mr. Hanf Team'.\n\n"
+          . "=== BEISPIEL-ANTWORTEN ALS STILVORLAGE ===\n\n"
+          . "Beispiel Nichtkeimung ausserhalb der Kulanzzeit:\n"
+          . "Ich habe mir deine Bestellung angeschaut. Leider ist es grundsaetzlich so, dass es auf die Keimung keine Garantie gibt - weder von uns noch vom Hersteller. Die Keimung haengt von vielen Faktoren ab. Zu einer Kulanz muss ich dir leider sagen, dass wir diese nur innerhalb von 30 Tagen nach Erhalt anbieten koennen. Nach dieser Frist haben wir keine Moeglichkeit mehr, die Lagerbedingungen auf Kundenseite nachzuvollziehen. Fuer zukuenftige Bestellungen wuerde ich empfehlen, uns innerhalb der 30 Tage zu kontaktieren.\n\n"
+          . "Beispiel Nichtkeimung innerhalb Kulanzzeit:\n"
+          . "Es tut mir leid zu hoeren, dass nicht alle Samen gekeimt sind. Leider gibt es auf die Keimung grundsaetzlich keine Garantie, da sie von vielen Faktoren abhaengt. Trotzdem moechten wir dir entgegenkommen. Option 1: 25% Kulanz auf die nicht gekeimten Samen als Gutschrift oder Gutschein. Option 2: Ersatzmenge aus unserem hauseigenen Sortiment (nur Versandkosten). Sag uns einfach welche Option dir lieber ist.\n\n"
+          . "Beispiel falsche Bestellung komplett:\n"
+          . "Es tut mir leid, dass du offenbar falsche Samen erhalten hast. Bitte schick uns ein Foto der gelieferten Samenverpackung sowie ein Bild des durchsichtigen Baggies (mit Bestellnummer). Antworte einfach auf diese E-Mail mit den Bildern, dann schauen wir uns das direkt an.\n\n"
+          . "Beispiel falsche Samenmenge:\n"
+          . "Bitte entschuldige die Verwechslung. Bitte antworte kurz mit einem Foto der erhaltenen Verpackung, damit wir den Vorgang sauber zuordnen koennen. Dann kuemmern wir uns schnellstmoeglich darum.\n\n"
+          . "Beispiel falsches Produkt/Art:\n"
+          . "Bitte entschuldige die Verwechslung bei deiner Bestellung. Damit wir das sauber pruefen koennen, schick uns bitte ein Foto der erhaltenen Samenverpackung und am besten auch ein Foto des Etiketts bzw. der Rueckseite der Verpackung.\n\n"
+          . "=== ENDE BEISPIELE ===\n"
+          . "Passe den Stil und Ton der obigen Beispiele an, aber formuliere die Antwort passend zur konkreten Situation des Kunden. Verwende die konkreten Bestelldaten und Produktnamen.";
         
         $user_message = "Kunde: " . $recl['customers_name'] . "\n"
           . "Bestellung: #" . $recl['orders_id'] . "\n"
@@ -167,6 +249,96 @@
         $secret_row = xtc_db_fetch_array($secret_q);
         $token = hash_hmac('sha256', date('Y-m-d'), $secret_row['configuration_value'] ?? '');
         echo json_encode(array('success' => true, 'token' => $token));
+        exit;
+
+      case 'check_unread':
+        // Alle Reklamationen mit Zoho-Ticket pruefen auf neue Antworten
+        $tickets_q = xtc_db_query("SELECT reclamation_id, zoho_ticket_id, zoho_last_thread_id FROM " . TABLE_ORDERS_RECLAMATION . " WHERE zoho_ticket_id IS NOT NULL AND zoho_ticket_id != '' AND reclamation_status NOT IN ('closed','resolved','rejected')");
+        $unread_map = array();
+        
+        $secret_q2 = xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = 'MODULE_ZOHO_DESK_CLIENT_SECRET'");
+        $secret_row2 = xtc_db_fetch_array($secret_q2);
+        $token2 = hash_hmac('sha256', date('Y-m-d'), $secret_row2['configuration_value'] ?? '');
+        $catalog_url2 = (defined('HTTPS_CATALOG_SERVER') ? HTTPS_CATALOG_SERVER : HTTP_CATALOG_SERVER) . DIR_WS_CATALOG;
+        
+        while ($t = xtc_db_fetch_array($tickets_q)) {
+          $conv_url = $catalog_url2 . 'zoho_desk_api.php?action=conversations&ticket_id=' . $t['zoho_ticket_id'] . '&token=' . $token2;
+          $ch = curl_init($conv_url);
+          curl_setopt_array($ch, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10, CURLOPT_SSL_VERIFYPEER => false));
+          $conv_resp = curl_exec($ch);
+          curl_close($ch);
+          $conv_data = json_decode($conv_resp, true);
+          
+          if (isset($conv_data['conversations'])) {
+            // Zaehle eingehende Nachrichten (direction=in) nach dem letzten bekannten Thread
+            $unread = 0;
+            $last_known = $t['zoho_last_thread_id'];
+            $found_last = empty($last_known); // Wenn kein letzter bekannt, alle zaehlen
+            $newest_thread_id = '';
+            
+            foreach ($conv_data['conversations'] as $thread) {
+              if (empty($newest_thread_id)) $newest_thread_id = $thread['id'];
+              if (!$found_last && $thread['id'] == $last_known) {
+                $found_last = true;
+                continue;
+              }
+              if ($found_last && isset($thread['direction']) && $thread['direction'] == 'in') {
+                $unread++;
+              }
+            }
+            
+            // Update DB
+            if ($unread != (int)$t['zoho_unread_count'] || 0) {
+              xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET zoho_unread_count = '" . (int)$unread . "' WHERE reclamation_id = '" . (int)$t['reclamation_id'] . "'");
+            }
+            $unread_map[(int)$t['reclamation_id']] = $unread;
+          }
+        }
+        echo json_encode(array('success' => true, 'unread' => $unread_map));
+        exit;
+
+      case 'close_ticket':
+        $recl_id = (int)$_POST['reclamation_id'];
+        $recl_data = xtc_db_fetch_array(xtc_db_query("SELECT zoho_ticket_id FROM " . TABLE_ORDERS_RECLAMATION . " WHERE reclamation_id = '" . $recl_id . "'"));
+        
+        if (empty($recl_data['zoho_ticket_id'])) {
+          echo json_encode(array('success' => false, 'message' => 'Kein Zoho-Ticket vorhanden'));
+          exit;
+        }
+        
+        $secret_q3 = xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = 'MODULE_ZOHO_DESK_CLIENT_SECRET'");
+        $secret_row3 = xtc_db_fetch_array($secret_q3);
+        $token3 = hash_hmac('sha256', date('Y-m-d'), $secret_row3['configuration_value'] ?? '');
+        $catalog_url3 = (defined('HTTPS_CATALOG_SERVER') ? HTTPS_CATALOG_SERVER : HTTP_CATALOG_SERVER) . DIR_WS_CATALOG;
+        
+        $close_url = $catalog_url3 . 'zoho_desk_api.php?action=update_status&token=' . $token3;
+        $ch = curl_init($close_url);
+        curl_setopt_array($ch, array(
+          CURLOPT_RETURNTRANSFER => true,
+          CURLOPT_POST => true,
+          CURLOPT_POSTFIELDS => http_build_query(array('ticket_id' => $recl_data['zoho_ticket_id'], 'status' => 'Closed')),
+          CURLOPT_TIMEOUT => 10,
+          CURLOPT_SSL_VERIFYPEER => false,
+        ));
+        $close_resp = curl_exec($ch);
+        curl_close($ch);
+        $close_data = json_decode($close_resp, true);
+        
+        if (isset($close_data['success']) && $close_data['success']) {
+          // Auch Reklamation auf closed setzen
+          xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET reclamation_status = 'closed', zoho_unread_count = 0 WHERE reclamation_id = '" . $recl_id . "'");
+          echo json_encode(array('success' => true, 'message' => 'Ticket geschlossen'));
+        } else {
+          echo json_encode(array('success' => false, 'message' => 'Zoho-Fehler: ' . (isset($close_data['error']) ? $close_data['error'] : 'Unbekannt')));
+        }
+        exit;
+
+      case 'mark_read':
+        // Unread-Counter zuruecksetzen und letzten Thread merken
+        $recl_id = (int)$_POST['reclamation_id'];
+        $last_thread = isset($_POST['last_thread_id']) ? xtc_db_prepare_input($_POST['last_thread_id']) : '';
+        xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET zoho_unread_count = 0, zoho_last_thread_id = '" . xtc_db_input($last_thread) . "' WHERE reclamation_id = '" . $recl_id . "'");
+        echo json_encode(array('success' => true));
         exit;
 
       case 'stats':
@@ -310,6 +482,12 @@
     
     .content-wrap { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem; }
     
+    /* Unread Badge */
+    .unread-badge { display: inline-flex; align-items: center; gap: 0.25rem; background: #c0392b; color: #fff; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.7rem; font-weight: 700; animation: pulse-badge 2s infinite; }
+    .unread-badge i { font-size: 0.65rem; }
+    @keyframes pulse-badge { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+    .ticket-badge { display: inline-flex; align-items: center; gap: 0.25rem; background: #27ae60; color: #fff; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+    
     /* Responsive */
     @media (max-width: 768px) {
       .stat-grid { grid-template-columns: repeat(2, 1fr); }
@@ -406,9 +584,9 @@
               <th>E-Mail</th>
               <th style="width:12%">Datum</th>
               <th style="width:9%">Status</th>
+              <th style="width:6%; text-align:center;">Ticket</th>
               <th style="width:5%; text-align:center;">Prod.</th>
               <th style="width:5%; text-align:center;">Bilder</th>
-              <th style="width:10%">IP</th>
               <th style="width:7%">Aktion</th>
             </tr>
           </thead>
@@ -433,9 +611,18 @@
                   <td><small><?php echo htmlspecialchars($recl['customers_email']); ?></small></td>
                   <td><small><?php echo date('d.m.Y H:i', strtotime($recl['reclamation_date'])); ?></small></td>
                   <td><span class="status-badge <?php echo $status_class; ?>"><?php echo $status_label; ?></span></td>
+                  <td style="text-align:center;">
+                    <?php if (!empty($recl['zoho_ticket_id'])): ?>
+                      <span class="ticket-badge" title="Ticket #<?php echo htmlspecialchars($recl['zoho_ticket_nr']); ?>"><i class="fa-solid fa-ticket"></i> <?php echo htmlspecialchars($recl['zoho_ticket_nr']); ?></span>
+                      <?php if ((int)$recl['zoho_unread_count'] > 0): ?>
+                        <span class="unread-badge" title="<?php echo (int)$recl['zoho_unread_count']; ?> neue Antwort(en)"><i class="fa-solid fa-envelope"></i> <?php echo (int)$recl['zoho_unread_count']; ?></span>
+                      <?php endif; ?>
+                    <?php else: ?>
+                      <small style="color:#ccc;">&mdash;</small>
+                    <?php endif; ?>
+                  </td>
                   <td style="text-align:center;"><?php echo (int)$recl['product_count']; ?></td>
                   <td style="text-align:center;"><?php echo (int)$recl['image_count']; ?></td>
-                  <td><small><?php echo htmlspecialchars(substr($recl['ip_address'], 0, 15)); ?></small></td>
                   <td>
                     <button class="btn-mrh" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="event.stopPropagation(); showDetail(<?php echo (int)$recl['reclamation_id']; ?>);">
                       <i class="fa-solid fa-eye"></i> Details
@@ -444,7 +631,7 @@
                 </tr>
               <?php endforeach; ?>
             <?php else: ?>
-              <tr><td colspan="10" style="text-align:center; padding:2rem; color:#999;">Keine Reklamationen gefunden.</td></tr>
+              <tr><td colspan="11" style="text-align:center; padding:2rem; color:#999;">Keine Reklamationen gefunden.</td></tr>
             <?php endif; ?>
           </tbody>
         </table>
@@ -630,44 +817,80 @@
         html += '</div>';
       }
       
-      // === Zoho Desk Ticket erstellen ===
+      // === Zoho Desk Ticket-Bereich ===
       html += '<hr style="margin:1.5rem 0;">';
-      html += '<h6 style="color:#c0392b;"><i class="fa-solid fa-headset"></i> Zoho Desk Ticket erstellen</h6>';
-      html += '<div style="background:#f0f7ff; padding:1rem; border-radius:8px; border:1px solid #d0e3f7;">';
       
-      // KI-Prompt Eingabe
-      html += '<div style="margin-bottom:0.75rem;">';
-      html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">KI-Anweisung (optional):</label>';
-      html += '<div style="display:flex; gap:0.5rem;">';
-      html += '<input type="text" id="ai-prompt" style="flex:1; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" placeholder="z.B. Biete 50% Gutschrift an...">';
-      html += '<button class="btn-mrh" style="white-space:nowrap;" onclick="generateAiText(' + data.reclamation_id + ')"><i class="fa-solid fa-wand-magic-sparkles"></i> KI-Text generieren</button>';
-      html += '</div>';
-      html += '</div>';
-      
-      // Ticket-Betreff
-      html += '<div style="margin-bottom:0.75rem;">';
-      html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Betreff:</label>';
-      html += '<input type="text" id="ticket-subject" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" value="Reklamation Bestellung #' + data.orders_id + ' - Mr. Hanf">';
-      html += '</div>';
-      
-      // Ticket-Text (wird von KI befuellt oder manuell)
-      html += '<div style="margin-bottom:0.75rem;">';
-      html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Nachricht an Kunden:</label>';
-      html += '<textarea id="ticket-message" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem; resize:vertical; min-height:120px;" placeholder="Text hier eingeben oder per KI generieren lassen..."></textarea>';
-      html += '</div>';
-      
-      // Empfaenger + Senden
-      html += '<div style="display:flex; gap:0.5rem; align-items:center;">';
-      html += '<div style="flex:1;"><label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Empf&auml;nger:</label>';
-      html += '<input type="email" id="ticket-email" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" value="' + escHtml(data.customers_email) + '"></div>';
-      html += '<div style="padding-top:1.2rem;"><button class="btn-mrh" style="background:#27ae60;" onclick="createZohoTicket(' + data.reclamation_id + ')"><i class="fa-solid fa-paper-plane"></i> Ticket erstellen &amp; senden</button></div>';
-      html += '</div>';
-      
-      // Status-Anzeige
-      html += '<div id="ticket-status" style="margin-top:0.75rem; display:none;"></div>';
-      html += '</div>';
+      if (data.zoho_ticket_id) {
+        // Ticket existiert bereits → Konversation anzeigen + Antwort senden + Schliessen
+        html += '<h6 style="color:#c0392b;"><i class="fa-solid fa-headset"></i> Zoho Ticket #' + escHtml(data.zoho_ticket_nr) + '</h6>';
+        html += '<div style="background:#f0f7ff; padding:1rem; border-radius:8px; border:1px solid #d0e3f7;">';
+        
+        // Konversation-Container (wird per AJAX geladen)
+        html += '<div id="ticket-conversations" style="margin-bottom:1rem; max-height:300px; overflow-y:auto; border:1px solid #e0e0e0; border-radius:6px; padding:0.75rem; background:#fff;"><div style="text-align:center; padding:1rem;"><i class="fa-solid fa-spinner fa-spin"></i> Lade Konversation...</div></div>';
+        
+        // Antwort-Bereich
+        html += '<div style="margin-bottom:0.75rem;">';
+        html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Antwort verfassen:</label>';
+        html += '<div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">';
+        html += '<input type="text" id="ai-prompt" style="flex:1; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" placeholder="z.B. Nichtkeimung innerhalb Kulanz, falsche Menge, Ersatzlieferung anbieten...">';
+        html += '<button class="btn-mrh" style="white-space:nowrap;" onclick="generateAiText(' + data.reclamation_id + ')"><i class="fa-solid fa-wand-magic-sparkles"></i> KI-Text</button>';
+        html += '</div>';
+        html += '<textarea id="ticket-message" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem; resize:vertical; min-height:100px;" placeholder="Antwort hier eingeben oder per KI generieren..."></textarea>';
+        html += '</div>';
+        
+        // Buttons: Antwort senden + Ticket schliessen
+        html += '<div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">';
+        html += '<button class="btn-mrh" style="background:#27ae60;" onclick="replyToTicket(' + data.reclamation_id + ', \'' + escHtml(data.zoho_ticket_id) + '\', \'' + escHtml(data.customers_email) + '\')"><i class="fa-solid fa-reply"></i> Antwort senden</button>';
+        html += '<button class="btn-mrh" style="background:#e74c3c;" onclick="closeTicket(' + data.reclamation_id + ')"><i class="fa-solid fa-xmark"></i> Ticket schliessen</button>';
+        html += '</div>';
+        
+        html += '<div id="ticket-status" style="margin-top:0.75rem; display:none;"></div>';
+        html += '</div>';
+        
+      } else {
+        // Kein Ticket → Hinweis + manuelles Erstellen
+        html += '<h6 style="color:#c0392b;"><i class="fa-solid fa-headset"></i> Zoho Desk Ticket</h6>';
+        html += '<div style="background:#f0f7ff; padding:1rem; border-radius:8px; border:1px solid #d0e3f7;">';
+        
+        if (data.reclamation_status == 'open') {
+          html += '<div style="background:#fff3cd; padding:0.75rem; border-radius:6px; margin-bottom:1rem; font-size:0.85rem;"><i class="fa-solid fa-info-circle"></i> <strong>Automatisch:</strong> Wenn du den Status auf &quot;In Bearbeitung&quot; setzt, wird automatisch ein Zoho-Ticket erstellt und der Kunde erhaelt eine Bestaetigungs-Mail.</div>';
+        }
+        
+        // Manuelles Erstellen (falls gewuenscht)
+        html += '<div style="margin-bottom:0.75rem;">';
+        html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Oder manuell Ticket erstellen:</label>';
+        html += '<div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">';
+        html += '<input type="text" id="ai-prompt" style="flex:1; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" placeholder="z.B. Nichtkeimung innerhalb Kulanz, falsche Menge...">';
+        html += '<button class="btn-mrh" style="white-space:nowrap;" onclick="generateAiText(' + data.reclamation_id + ')"><i class="fa-solid fa-wand-magic-sparkles"></i> KI-Text</button>';
+        html += '</div>';
+        html += '</div>';
+        
+        html += '<div style="margin-bottom:0.75rem;">';
+        html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Betreff:</label>';
+        html += '<input type="text" id="ticket-subject" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" value="Reklamation Bestellung #' + data.orders_id + ' - Mr. Hanf">';
+        html += '</div>';
+        
+        html += '<div style="margin-bottom:0.75rem;">';
+        html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Nachricht:</label>';
+        html += '<textarea id="ticket-message" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem; resize:vertical; min-height:100px;" placeholder="Text eingeben oder per KI generieren..."></textarea>';
+        html += '</div>';
+        
+        html += '<div style="display:flex; gap:0.5rem; align-items:center;">';
+        html += '<div style="flex:1;"><label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Empf&auml;nger:</label>';
+        html += '<input type="email" id="ticket-email" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" value="' + escHtml(data.customers_email) + '"></div>';
+        html += '<div style="padding-top:1.2rem;"><button class="btn-mrh" style="background:#27ae60;" onclick="createZohoTicket(' + data.reclamation_id + ')"><i class="fa-solid fa-paper-plane"></i> Ticket erstellen</button></div>';
+        html += '</div>';
+        
+        html += '<div id="ticket-status" style="margin-top:0.75rem; display:none;"></div>';
+        html += '</div>';
+      }
       
       document.getElementById('modal-body').innerHTML = html;
+      
+      // Wenn Ticket existiert, Konversation laden
+      if (data.zoho_ticket_id) {
+        loadConversations(data.zoho_ticket_id, data.reclamation_id);
+      }
     }
 
     function updateStatus(id) {
@@ -801,6 +1024,132 @@
       };
       el.innerHTML = '<div style="' + (colors[type] || colors.info) + 'padding:0.75rem;border-radius:6px;font-size:0.85rem;">' + msg + '</div>';
     }
+
+    // === Konversation laden ===
+    function loadConversations(ticketId, reclId) {
+      fetch(DASHBOARD_URL + '?ajax=zoho_token')
+      .then(function(r) { return r.json(); })
+      .then(function(tokenData) {
+        if (!tokenData.success) return;
+        return fetch(CATALOG_URL + 'zoho_desk_api.php?action=conversations&ticket_id=' + ticketId + '&token=' + tokenData.token);
+      })
+      .then(function(r) { if (r) return r.json(); })
+      .then(function(d) {
+        if (!d || !d.conversations) {
+          document.getElementById('ticket-conversations').innerHTML = '<div style="color:#999; text-align:center; padding:0.5rem;">Keine Nachrichten.</div>';
+          return;
+        }
+        var convHtml = '';
+        var lastThreadId = '';
+        for (var i = d.conversations.length - 1; i >= 0; i--) {
+          var c = d.conversations[i];
+          if (i === 0) lastThreadId = c.id;
+          var isIn = (c.direction === 'in');
+          var bgColor = isIn ? '#fff3cd' : '#d4edda';
+          var icon = isIn ? 'fa-user' : 'fa-headset';
+          var label = isIn ? 'Kunde' : 'Support';
+          var authorName = (c.author && c.author.name) ? c.author.name : label;
+          var dateStr = c.createdTime ? new Date(c.createdTime).toLocaleString('de-DE') : '';
+          
+          convHtml += '<div style="background:' + bgColor + '; padding:0.6rem 0.75rem; border-radius:6px; margin-bottom:0.5rem; font-size:0.82rem;">';
+          convHtml += '<div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;"><strong><i class="fa-solid ' + icon + '"></i> ' + escHtml(authorName) + '</strong><small style="color:#888;">' + dateStr + '</small></div>';
+          convHtml += '<div>' + (c.content || escHtml(c.summary || '')) + '</div>';
+          convHtml += '</div>';
+        }
+        document.getElementById('ticket-conversations').innerHTML = convHtml || '<div style="color:#999; text-align:center;">Keine Nachrichten.</div>';
+        // Scroll nach unten
+        var convEl = document.getElementById('ticket-conversations');
+        convEl.scrollTop = convEl.scrollHeight;
+        
+        // Mark as read
+        if (lastThreadId) {
+          var fd = new FormData();
+          fd.append('reclamation_id', reclId);
+          fd.append('last_thread_id', lastThreadId);
+          fetch(DASHBOARD_URL + '?ajax=mark_read', { method: 'POST', body: fd });
+        }
+      });
+    }
+    
+    // === Antwort auf Ticket senden ===
+    function replyToTicket(reclId, ticketId, email) {
+      var message = document.getElementById('ticket-message').value.trim();
+      if (!message) {
+        showTicketStatus('error', 'Bitte eine Antwort eingeben.');
+        return;
+      }
+      
+      showTicketStatus('info', '<i class="fa-solid fa-spinner fa-spin"></i> Sende Antwort...');
+      
+      fetch(DASHBOARD_URL + '?ajax=zoho_token')
+      .then(function(r) { return r.json(); })
+      .then(function(tokenData) {
+        if (!tokenData.success) {
+          showTicketStatus('error', 'Token-Fehler');
+          return;
+        }
+        var fd = new FormData();
+        fd.append('token', tokenData.token);
+        fd.append('ticket_id', ticketId);
+        fd.append('to', email);
+        fd.append('content', message);
+        
+        return fetch(CATALOG_URL + 'zoho_desk_api.php?action=reply&token=' + tokenData.token, {
+          method: 'POST',
+          body: fd
+        });
+      })
+      .then(function(r) { if (r) return r.json(); })
+      .then(function(d) {
+        if (!d) return;
+        if (d.success) {
+          showTicketStatus('success', '<i class="fa-solid fa-check-circle"></i> Antwort gesendet!');
+          document.getElementById('ticket-message').value = '';
+          // Konversation neu laden
+          setTimeout(function() { loadConversations(ticketId, reclId); }, 1500);
+        } else {
+          showTicketStatus('error', 'Fehler: ' + (d.error || 'Unbekannt'));
+        }
+      })
+      .catch(function(err) {
+        showTicketStatus('error', 'Netzwerkfehler: ' + err.message);
+      });
+    }
+    
+    // === Ticket schliessen ===
+    function closeTicket(reclId) {
+      if (!window.confirm('Ticket wirklich schliessen? Der Kunde erhaelt keine weiteren Nachrichten.')) return;
+      
+      showTicketStatus('info', '<i class="fa-solid fa-spinner fa-spin"></i> Schliesse Ticket...');
+      
+      var fd = new FormData();
+      fd.append('reclamation_id', reclId);
+      
+      fetch(DASHBOARD_URL + '?ajax=close_ticket', {
+        method: 'POST',
+        body: fd
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) {
+          showTicketStatus('success', '<i class="fa-solid fa-check-circle"></i> Ticket geschlossen!');
+          setTimeout(function() { location.reload(); }, 1500);
+        } else {
+          showTicketStatus('error', 'Fehler: ' + d.message);
+        }
+      });
+    }
+    
+    // === Unread-Check beim Seitenaufruf ===
+    fetch(DASHBOARD_URL + '?ajax=check_unread')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success && d.unread) {
+          // Badges in der Tabelle aktualisieren (fuer dynamische Updates)
+          // Die PHP-Seite zeigt bereits die gespeicherten Werte an
+        }
+      })
+      .catch(function() {});
 
     function escHtml(str) {
       if (!str) return '';

@@ -47,7 +47,7 @@
   define('TEXT_RECLAMATION_SEED_TEMP', 'Temperatur bei Keimung');
   define('TEXT_RECLAMATION_SEED_TEMP_UNDER18', 'Unter 18&deg;C');
   define('TEXT_RECLAMATION_SEED_TEMP_18_22', '18&ndash;22&deg;C');
-  define('TEXT_RECLAMATION_SEED_TEMP_22_26', '22&ndash;26&deg;C (optimal)');
+  define('TEXT_RECLAMATION_SEED_TEMP_22_26', '22&ndash;26&deg;C');
   define('TEXT_RECLAMATION_SEED_TEMP_OVER26', '&Uuml;ber 26&deg;C');
   define('TEXT_RECLAMATION_SEED_TEMP_UNKNOWN', 'Unbekannt');
   define('TEXT_RECLAMATION_SEED_DAYS', 'Wie viele Tage gewartet?');

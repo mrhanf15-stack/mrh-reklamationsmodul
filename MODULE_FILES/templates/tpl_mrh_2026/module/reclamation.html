@@ -181,7 +181,7 @@
                       {* Reklamationsgrund *}
                       <div class="mb-3">
                         <label class="form-label fw-semibold">{$smarty.const.TEXT_RECLAMATION_REASON_LABEL} *</label>
-                        <select class="form-select seed-reason-select" name="reason_{$order_data.ORDERS_PRODUCTS_ID}" id="reason_{$order_data.ORDERS_PRODUCTS_ID}" onchange="toggleSeedQuestions(this, {$order_data.ORDERS_PRODUCTS_ID})" required>
+                        <select class="form-select seed-reason-select" name="reason_{$order_data.ORDERS_PRODUCTS_ID}" id="reason_{$order_data.ORDERS_PRODUCTS_ID}" onchange="toggleSeedQuestions(this, {$order_data.ORDERS_PRODUCTS_ID})">
                           <option value="">{$smarty.const.TEXT_RECLAMATION_REASON_SELECT}</option>
                           <option value="not_germinated">{$smarty.const.TEXT_RECLAMATION_SEED_NOT_GERMINATED}</option>
                           <option value="damaged_delivery">{$smarty.const.TEXT_RECLAMATION_SEED_DAMAGED}</option>
@@ -209,6 +209,17 @@
                                 </select>
                               </div>
 
+                              <div class="col-md-6">
+                                <label class="form-label">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP} *</label>
+                                <select class="form-select" name="seed_temp_{$order_data.ORDERS_PRODUCTS_ID}">
+                                  <option value="">{$smarty.const.TEXT_RECLAMATION_REASON_SELECT}</option>
+                                  <option value="under_18">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_UNDER18}</option>
+                                  <option value="18_22">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_18_22}</option>
+                                  <option value="22_26">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_22_26}</option>
+                                  <option value="over_26">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_OVER26}</option>
+                                  <option value="unknown">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_UNKNOWN}</option>
+                                </select>
+                              </div>
                               <div class="col-md-6">
                                 <label class="form-label">{$smarty.const.TEXT_RECLAMATION_SEED_DAYS} *</label>
                                 <select class="form-select" name="seed_days_{$order_data.ORDERS_PRODUCTS_ID}">
@@ -305,7 +316,7 @@
                       {* Reklamationsgrund *}
                       <div class="mb-3">
                         <label class="form-label fw-semibold">{$smarty.const.TEXT_RECLAMATION_REASON_LABEL} *</label>
-                        <select class="form-select" name="reason_{$order_data.ORDERS_PRODUCTS_ID}" required>
+                        <select class="form-select" name="reason_{$order_data.ORDERS_PRODUCTS_ID}">
                           <option value="">{$smarty.const.TEXT_RECLAMATION_REASON_SELECT}</option>
                           <option value="transport_damage">{$smarty.const.TEXT_RECLAMATION_REASON_TRANSPORT}</option>
                           <option value="wrong_product">{$smarty.const.TEXT_RECLAMATION_REASON_WRONG}</option>

@@ -47,7 +47,7 @@
   define('TEXT_RECLAMATION_SEED_TEMP', 'Temperatura durante la germinaci&oacute;n');
   define('TEXT_RECLAMATION_SEED_TEMP_UNDER18', 'Menos de 18&deg;C');
   define('TEXT_RECLAMATION_SEED_TEMP_18_22', '18&ndash;22&deg;C');
-  define('TEXT_RECLAMATION_SEED_TEMP_22_26', '22&ndash;26&deg;C (optimal)');
+  define('TEXT_RECLAMATION_SEED_TEMP_22_26', '22&ndash;26&deg;C');
   define('TEXT_RECLAMATION_SEED_TEMP_OVER26', 'M&aacute;s de 26&deg;C');
   define('TEXT_RECLAMATION_SEED_TEMP_UNKNOWN', 'Desconocido');
   define('TEXT_RECLAMATION_SEED_DAYS', '&iquest;Cu&aacute;ntos d&iacute;as esper&oacute;?');

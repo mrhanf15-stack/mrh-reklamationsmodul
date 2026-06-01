@@ -546,6 +546,18 @@
       .filter-bar { flex-direction: column; }
       .content-wrap { padding: 1rem; }
     }
+  /* === Druck-Styles === */
+  @media print {
+    body * { visibility: hidden !important; }
+    .mrh-overlay, .mrh-overlay * { visibility: visible !important; }
+    .mrh-overlay { position: absolute; top: 0; left: 0; width: 100%; background: #fff !important; overflow: visible !important; }
+    .mrh-dialog { position: relative; max-width: 100% !important; width: 100% !important; max-height: none !important; margin: 0 !important; box-shadow: none !important; overflow: visible !important; }
+    .mrh-dialog-body { max-height: none !important; overflow: visible !important; }
+    .mrh-dialog-head .close-btn, .mrh-dialog-head .btn-mrh { display: none !important; }
+    .btn-mrh, .btn-outline-mrh, button { display: none !important; }
+    .mrh-dialog-head h5 { visibility: visible !important; }
+    img { max-width: 200px !important; height: auto !important; }
+  }
   </style>
 </head>
 <body>
@@ -729,7 +741,10 @@
     <div class="mrh-dialog">
       <div class="mrh-dialog-head">
         <h5><i class="fa-solid fa-triangle-exclamation"></i> Reklamation #<span id="modal-id"></span></h5>
-        <button class="close-btn" onclick="closeModal()">&times;</button>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <button class="btn-mrh" style="padding:0.3rem 0.7rem; font-size:0.8rem; background:#34495e;" onclick="printModal()" title="Drucken"><i class="fa-solid fa-print"></i> Drucken</button>
+          <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
       </div>
       <div class="mrh-dialog-body" id="modal-body">
         <div style="text-align:center; padding:2rem;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#c0392b;"></i></div>
@@ -824,6 +839,10 @@
       modal.classList.remove('show');
       modal.style.display = 'none';
       document.body.style.overflow = '';
+    }
+
+    function printModal() {
+      window.print();
     }
 
     // Klick ausserhalb Modal schliesst es

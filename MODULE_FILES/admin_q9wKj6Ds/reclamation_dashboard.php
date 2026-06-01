@@ -63,21 +63,31 @@
           
           $response = array('success' => true, 'message' => 'Status aktualisiert');
           
-          // === Auto-Mail bei Wechsel zu 'in_progress' (Bestaetigungs-Mail direkt an Kunden, KEIN Ticket) ===
+          // === Auto-Mail bei Wechsel zu 'in_progress' (Bestaetigungs-Mail via Modified xtc_php_mail) ===
           if ($new_status == 'in_progress' && $prev_recl['reclamation_status'] == 'open') {
             $confirm_subject = 'Reklamation Bestellung #' . $prev_recl['orders_id'] . ' - Wir pruefen deinen Fall';
-            $confirm_body = 'Hallo ' . $prev_recl['customers_name'] . ",\n\n"
-              . "vielen Dank fuer deine Nachricht zu deiner Bestellung #" . $prev_recl['orders_id'] . ".\n\n"
-              . "Wir haben deine Reklamation erhalten und unsere Spezialisten pruefen den Fall. "
-              . "Du erhaeltst in Kuerze eine ausfuehrliche Antwort von uns.\n\n"
-              . "Bitte antworte einfach auf diese E-Mail, falls du weitere Informationen ergaenzen moechtest.\n\n"
-              . "Dein Mr. Hanf Team";
+            $confirm_body_html = '<p>Hallo ' . htmlspecialchars($prev_recl['customers_name']) . ',</p>'
+              . '<p>vielen Dank f&uuml;r deine Nachricht zu deiner Bestellung #' . (int)$prev_recl['orders_id'] . '.</p>'
+              . '<p>Wir haben deine Reklamation erhalten und unsere Spezialisten pr&uuml;fen den Fall. '
+              . 'Du erh&auml;ltst in K&uuml;rze eine ausf&uuml;hrliche Antwort von uns.</p>'
+              . '<p>Bitte antworte einfach auf diese E-Mail, falls du weitere Informationen erg&auml;nzen m&ouml;chtest.</p>'
+              . '<p>Dein Mr. Hanf Team</p>';
             
-            // Mail direkt senden (Shop-eigene Mailfunktion)
-            $mail_headers = 'From: Mr. Hanf Reklamation <info@mr-hanf.de>' . "\r\n";
-            $mail_headers .= 'Reply-To: info@mr-hanf.de' . "\r\n";
-            $mail_headers .= 'Content-Type: text/plain; charset=UTF-8' . "\r\n";
-            $mail_sent = mail($prev_recl['customers_email'], $confirm_subject, $confirm_body, $mail_headers);
+            // Modified Shop-eigene Mailfunktion verwenden
+            $mail_sent = xtc_php_mail(
+              EMAIL_SUPPORT_ADDRESS,          // Absender-Mail
+              EMAIL_SUPPORT_NAME,             // Absender-Name  
+              $prev_recl['customers_email'],  // Empfaenger-Mail
+              $prev_recl['customers_name'],   // Empfaenger-Name
+              '',                             // Forwarding-To
+              EMAIL_SUPPORT_REPLY_ADDRESS,    // Reply-To Mail
+              EMAIL_SUPPORT_REPLY_ADDRESS_NAME, // Reply-To Name
+              '',                             // Attachment
+              '',                             // Attachment-Name
+              $confirm_subject,               // Betreff
+              $confirm_body_html,             // HTML-Body
+              strip_tags(str_replace(array('<p>', '</p>', '<br>'), array('', "\n\n", "\n"), $confirm_body_html)) // Text-Body
+            );
             
             if ($mail_sent) {
               $response['email_sent'] = true;
@@ -1068,14 +1078,23 @@
           fetch(DASHBOARD_URL + '?ajax=save_ticket_id', { method: 'POST', body: saveFd });
           
           // Jetzt Reply senden damit Kunde die Mail bekommt
-          var replyFd = new FormData();
-          replyFd.append('ticket_id', d.ticket_id);
-          replyFd.append('to', email);
-          replyFd.append('content', '<div>' + message.replace(/\n/g, '<br>') + '</div>');
-          
-          return fetch(CATALOG_URL + 'zoho_desk_api.php?action=reply&token=' + savedToken, {
-            method: 'POST',
-            body: replyFd
+          // Kurzer Delay damit Zoho das Ticket verarbeiten kann
+          return new Promise(function(resolve) { setTimeout(resolve, 1500); }).then(function() {
+            var replyFd = new FormData();
+            replyFd.append('ticket_id', d.ticket_id);
+            replyFd.append('to', email);
+            // Content sauber als HTML aufbereiten (Sonderzeichen escapen)
+            var safeContent = message
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/\n/g, '<br>');
+            replyFd.append('content', '<div>' + safeContent + '</div>');
+            
+            return fetch(CATALOG_URL + 'zoho_desk_api.php?action=reply&token=' + savedToken, {
+              method: 'POST',
+              body: replyFd
+            });
           }).then(function(r2) { return r2.json(); }).then(function(replyData) {
             var linkHtml = '';
             if (d.web_url) {

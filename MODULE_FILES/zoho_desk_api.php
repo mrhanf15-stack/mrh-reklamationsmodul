@@ -214,20 +214,15 @@ switch ($action) {
             echo json_encode(['error' => 'Nur POST-Requests erlaubt']);
             exit;
         }
-                file_put_contents(dirname(__FILE__) . '/log/zoho_debug.log', date('H:i:s') . " tid=[$ticket_id] to=[$to] content=[$content]\n", FILE_APPEND);
-
 
         $ticket_id = isset($_POST['ticket_id']) ? trim($_POST['ticket_id']) : '';
         $to        = isset($_POST['to'])        ? trim($_POST['to'])        : '';
         $content   = isset($_POST['content'])   ? trim($_POST['content'])   : '';
 
-		        if (empty($ticket_id) || empty($to) || empty($content)) {
+        if (empty($ticket_id) || empty($to) || empty($content)) {
             echo json_encode(['error' => 'Ticket-ID, Empfaenger und Inhalt sind erforderlich']);
             exit;
         }
-
-        // DEBUG
-                file_put_contents(dirname(__FILE__) . '/log/zoho_debug.log', date('H:i:s') . " tid=[$ticket_id] to=[$to] content=[$content]\n", FILE_APPEND);
 
 
         // Content muss HTML sein - wenn kein HTML-Tag vorhanden, in div wrappen

@@ -31,6 +31,7 @@
     'zoho_ticket_nr' => "ALTER TABLE `orders_reclamation` ADD COLUMN `zoho_ticket_nr` VARCHAR(50) DEFAULT NULL AFTER `zoho_ticket_id`",
     'zoho_unread_count' => "ALTER TABLE `orders_reclamation` ADD COLUMN `zoho_unread_count` INT(11) DEFAULT 0 AFTER `zoho_ticket_nr`",
     'zoho_last_thread_id' => "ALTER TABLE `orders_reclamation` ADD COLUMN `zoho_last_thread_id` VARCHAR(50) DEFAULT NULL AFTER `zoho_unread_count`",
+    'is_archived' => "ALTER TABLE `orders_reclamation` ADD COLUMN `is_archived` TINYINT(1) DEFAULT 0 AFTER `zoho_last_thread_id`",
   );
   foreach ($zoho_cols as $col => $sql) {
     $check = xtc_db_query("SHOW COLUMNS FROM `orders_reclamation` LIKE '" . $col . "'");
@@ -62,9 +63,8 @@
           
           $response = array('success' => true, 'message' => 'Status aktualisiert');
           
-          // === Auto-Ticket bei Wechsel zu 'in_progress' (nur wenn noch kein Ticket existiert) ===
-          if ($new_status == 'in_progress' && empty($prev_recl['zoho_ticket_id'])) {
-            // Standardisierte Bestaetigungs-Mail
+          // === Auto-Mail bei Wechsel zu 'in_progress' (Bestaetigungs-Mail direkt an Kunden, KEIN Ticket) ===
+          if ($new_status == 'in_progress' && $prev_recl['reclamation_status'] == 'open') {
             $confirm_subject = 'Reklamation Bestellung #' . $prev_recl['orders_id'] . ' - Wir pruefen deinen Fall';
             $confirm_body = 'Hallo ' . $prev_recl['customers_name'] . ",\n\n"
               . "vielen Dank fuer deine Nachricht zu deiner Bestellung #" . $prev_recl['orders_id'] . ".\n\n"
@@ -73,44 +73,17 @@
               . "Bitte antworte einfach auf diese E-Mail, falls du weitere Informationen ergaenzen moechtest.\n\n"
               . "Dein Mr. Hanf Team";
             
-            // Zoho Ticket erstellen via interner API
-            $zoho_secret_q = xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = 'MODULE_ZOHO_DESK_CLIENT_SECRET'");
-            $zoho_secret_row = xtc_db_fetch_array($zoho_secret_q);
-            $zoho_token = hash_hmac('sha256', date('Y-m-d'), $zoho_secret_row['configuration_value'] ?? '');
+            // Mail direkt senden (Shop-eigene Mailfunktion)
+            $mail_headers = 'From: Mr. Hanf Reklamation <info@mr-hanf.de>' . "\r\n";
+            $mail_headers .= 'Reply-To: info@mr-hanf.de' . "\r\n";
+            $mail_headers .= 'Content-Type: text/plain; charset=UTF-8' . "\r\n";
+            $mail_sent = mail($prev_recl['customers_email'], $confirm_subject, $confirm_body, $mail_headers);
             
-            $catalog_url = (defined('HTTPS_CATALOG_SERVER') ? HTTPS_CATALOG_SERVER : HTTP_CATALOG_SERVER) . DIR_WS_CATALOG;
-            $zoho_api_url = $catalog_url . 'zoho_desk_api.php?action=create_ticket&token=' . $zoho_token;
-            
-            $post_data = http_build_query(array(
-              'subject' => $confirm_subject,
-              'description' => $confirm_body,
-              'email' => $prev_recl['customers_email'],
-              'contact_name' => $prev_recl['customers_name'],
-            ));
-            
-            $ch = curl_init($zoho_api_url);
-            curl_setopt_array($ch, array(
-              CURLOPT_RETURNTRANSFER => true,
-              CURLOPT_POST => true,
-              CURLOPT_POSTFIELDS => $post_data,
-              CURLOPT_TIMEOUT => 15,
-              CURLOPT_SSL_VERIFYPEER => false,
-            ));
-            $zoho_response = curl_exec($ch);
-            curl_close($ch);
-            
-            $zoho_data = json_decode($zoho_response, true);
-            if (isset($zoho_data['success']) && $zoho_data['success']) {
-              // Ticket-ID und Nummer in DB speichern
-              xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " 
-                              SET zoho_ticket_id = '" . xtc_db_input($zoho_data['ticket_id']) . "',
-                                  zoho_ticket_nr = '" . xtc_db_input($zoho_data['ticket_nr']) . "'
-                            WHERE reclamation_id = '" . $recl_id . "'");
-              $response['ticket_created'] = true;
-              $response['ticket_nr'] = $zoho_data['ticket_nr'];
-              $response['message'] = 'Status aktualisiert + Zoho Ticket #' . $zoho_data['ticket_nr'] . ' erstellt';
+            if ($mail_sent) {
+              $response['email_sent'] = true;
+              $response['message'] = 'Status aktualisiert + Bestaetigungs-Mail gesendet';
             } else {
-              $response['ticket_error'] = isset($zoho_data['error']) ? $zoho_data['error'] : 'Unbekannter Fehler';
+              $response['email_error'] = 'Mail konnte nicht gesendet werden';
             }
           }
           
@@ -341,14 +314,39 @@
         echo json_encode(array('success' => true));
         exit;
 
+      case 'save_ticket_id':
+        $recl_id = (int)$_POST['reclamation_id'];
+        $ticket_id = xtc_db_prepare_input($_POST['ticket_id']);
+        $ticket_nr = xtc_db_prepare_input(isset($_POST['ticket_nr']) ? $_POST['ticket_nr'] : '');
+        xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " 
+          SET zoho_ticket_id = '" . xtc_db_input($ticket_id) . "',
+              zoho_ticket_nr = '" . xtc_db_input($ticket_nr) . "'
+          WHERE reclamation_id = '" . $recl_id . "'");
+        echo json_encode(array('success' => true));
+        exit;
+
+      case 'archive':
+        $recl_id = (int)$_POST['reclamation_id'];
+        xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET is_archived = 1 WHERE reclamation_id = '" . $recl_id . "'");
+        echo json_encode(array('success' => true, 'message' => 'Reklamation archiviert'));
+        exit;
+
+      case 'unarchive':
+        $recl_id = (int)$_POST['reclamation_id'];
+        xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET is_archived = 0 WHERE reclamation_id = '" . $recl_id . "'");
+        echo json_encode(array('success' => true, 'message' => 'Reklamation wiederhergestellt'));
+        exit;
+
       case 'stats':
         $stats = array();
-        $s_query = xtc_db_query("SELECT reclamation_status, COUNT(*) as cnt FROM " . TABLE_ORDERS_RECLAMATION . " GROUP BY reclamation_status");
+        $s_query = xtc_db_query("SELECT reclamation_status, COUNT(*) as cnt FROM " . TABLE_ORDERS_RECLAMATION . " WHERE (is_archived = 0 OR is_archived IS NULL) GROUP BY reclamation_status");
         while ($s = xtc_db_fetch_array($s_query)) {
           $stats[$s['reclamation_status']] = (int)$s['cnt'];
         }
-        $total = xtc_db_fetch_array(xtc_db_query("SELECT COUNT(*) as cnt FROM " . TABLE_ORDERS_RECLAMATION));
+        $total = xtc_db_fetch_array(xtc_db_query("SELECT COUNT(*) as cnt FROM " . TABLE_ORDERS_RECLAMATION . " WHERE (is_archived = 0 OR is_archived IS NULL)"));
         $stats['total'] = (int)$total['cnt'];
+        $archived_cnt = xtc_db_fetch_array(xtc_db_query("SELECT COUNT(*) as cnt FROM " . TABLE_ORDERS_RECLAMATION . " WHERE is_archived = 1"));
+        $stats['archived'] = (int)$archived_cnt['cnt'];
         
         // Samen vs Zubehoer
         $seed_cnt = xtc_db_fetch_array(xtc_db_query("SELECT COUNT(*) as cnt FROM " . TABLE_ORDERS_RECLAMATION_PRODUCTS . " WHERE product_category = 'seed'"));
@@ -364,12 +362,19 @@
   // === Filter-Parameter ===
   $filter_status = isset($_GET['status']) ? xtc_db_prepare_input($_GET['status']) : '';
   $filter_search = isset($_GET['search']) ? xtc_db_prepare_input($_GET['search']) : '';
+  $show_archive = isset($_GET['archive']) && $_GET['archive'] == '1';
   $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
   $per_page = 25;
   $offset = ($page - 1) * $per_page;
 
   // WHERE-Klausel aufbauen
   $where = " WHERE 1=1 ";
+  // Archiv-Filter: Hauptliste = nicht archiviert, Archiv-Tab = nur archivierte
+  if ($show_archive) {
+    $where .= " AND r.is_archived = 1 ";
+  } else {
+    $where .= " AND (r.is_archived = 0 OR r.is_archived IS NULL) ";
+  }
   if ($filter_status != '') {
     $where .= " AND r.reclamation_status = '" . xtc_db_input($filter_status) . "' ";
   }
@@ -571,9 +576,19 @@
       </div>
     </div>
 
+    <!-- Tab-Navigation: Aktiv / Archiv -->
+    <div style="display:flex; gap:0; margin-bottom:-1px; position:relative; z-index:1;">
+      <a href="<?php echo $dashboard_url; ?>" class="btn-mrh" style="border-radius:8px 8px 0 0; padding:0.6rem 1.5rem; <?php echo !$show_archive ? 'background:#c0392b;' : 'background:#e9ecef; color:#555; border:1px solid #ddd; border-bottom:none;'; ?>">
+        <i class="fa-solid fa-list"></i> Aktiv
+      </a>
+      <a href="<?php echo $dashboard_url; ?>?archive=1" class="btn-mrh" style="border-radius:8px 8px 0 0; padding:0.6rem 1.5rem; <?php echo $show_archive ? 'background:#c0392b;' : 'background:#e9ecef; color:#555; border:1px solid #ddd; border-bottom:none;'; ?>">
+        <i class="fa-solid fa-box-archive"></i> Archiv <span id="archive-count-badge" style="background:rgba(255,255,255,0.3); padding:0.1rem 0.4rem; border-radius:10px; font-size:0.7rem; margin-left:0.25rem;">0</span>
+      </a>
+    </div>
+
     <!-- Reklamations-Liste -->
-    <div class="mrh-card">
-      <div class="card-header"><i class="fa-solid fa-list"></i> Reklamationen (<?php echo $total_records; ?>)</div>
+    <div class="mrh-card" style="border-radius:0 10px 10px 10px;">
+      <div class="card-header"><i class="fa-solid fa-<?php echo $show_archive ? 'box-archive' : 'list'; ?>"></i> <?php echo $show_archive ? 'Archivierte' : 'Aktive'; ?> Reklamationen (<?php echo $total_records; ?>)</div>
       <div class="card-body" style="padding:0; overflow-x:auto;">
         <table class="recl-table">
           <thead>
@@ -627,6 +642,15 @@
                     <button class="btn-mrh" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="event.stopPropagation(); showDetail(<?php echo (int)$recl['reclamation_id']; ?>);">
                       <i class="fa-solid fa-eye"></i> Details
                     </button>
+                    <?php if ($show_archive): ?>
+                      <button class="btn-outline-mrh" style="padding:0.3rem 0.6rem; font-size:0.7rem; margin-left:0.25rem;" onclick="event.stopPropagation(); unarchiveRecl(<?php echo (int)$recl['reclamation_id']; ?>);" title="Wiederherstellen">
+                        <i class="fa-solid fa-rotate-left"></i>
+                      </button>
+                    <?php elseif (in_array($recl['reclamation_status'], array('closed', 'resolved', 'rejected'))): ?>
+                      <button class="btn-outline-mrh" style="padding:0.3rem 0.6rem; font-size:0.7rem; margin-left:0.25rem;" onclick="event.stopPropagation(); archiveRecl(<?php echo (int)$recl['reclamation_id']; ?>);" title="Archivieren">
+                        <i class="fa-solid fa-box-archive"></i>
+                      </button>
+                    <?php endif; ?>
                   </td>
                 </tr>
               <?php endforeach; ?>
@@ -683,8 +707,42 @@
           document.getElementById('stat-resolved').textContent = s.resolved || 0;
           document.getElementById('stat-rejected').textContent = s.rejected || 0;
           document.getElementById('stat-seed').textContent = s.seed_products || 0;
+          // Archiv-Zaehler im Tab-Badge aktualisieren
+          var archBadge = document.getElementById('archive-count-badge');
+          if (archBadge) archBadge.textContent = s.archived || 0;
         }
       });
+
+    // === Archiv-Funktionen ===
+    function archiveRecl(reclId) {
+      if (!confirm('Reklamation #' + reclId + ' archivieren?')) return;
+      var fd = new FormData();
+      fd.append('reclamation_id', reclId);
+      fetch(DASHBOARD_URL + '?ajax=archive', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.success) {
+            location.reload();
+          } else {
+            alert('Fehler: ' + (d.message || 'Unbekannt'));
+          }
+        });
+    }
+
+    function unarchiveRecl(reclId) {
+      if (!confirm('Reklamation #' + reclId + ' wiederherstellen?')) return;
+      var fd = new FormData();
+      fd.append('reclamation_id', reclId);
+      fetch(DASHBOARD_URL + '?ajax=unarchive', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.success) {
+            location.reload();
+          } else {
+            alert('Fehler: ' + (d.message || 'Unbekannt'));
+          }
+        });
+    }
 
     // Modal beim Laden an body anhängen (verhindert z-index/overflow Probleme durch Parent-Container)
     (function() {
@@ -853,12 +911,12 @@
         html += '<div style="background:#f0f7ff; padding:1rem; border-radius:8px; border:1px solid #d0e3f7;">';
         
         if (data.reclamation_status == 'open') {
-          html += '<div style="background:#fff3cd; padding:0.75rem; border-radius:6px; margin-bottom:1rem; font-size:0.85rem;"><i class="fa-solid fa-info-circle"></i> <strong>Automatisch:</strong> Wenn du den Status auf &quot;In Bearbeitung&quot; setzt, wird automatisch ein Zoho-Ticket erstellt und der Kunde erhaelt eine Bestaetigungs-Mail.</div>';
+          html += '<div style="background:#fff3cd; padding:0.75rem; border-radius:6px; margin-bottom:1rem; font-size:0.85rem;"><i class="fa-solid fa-info-circle"></i> <strong>Hinweis:</strong> Wenn du den Status auf &quot;In Bearbeitung&quot; setzt, erhaelt der Kunde automatisch eine Bestaetigungs-Mail. Ein Zoho-Ticket kannst du unten manuell erstellen.</div>';
         }
         
         // Manuelles Erstellen (falls gewuenscht)
         html += '<div style="margin-bottom:0.75rem;">';
-        html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Oder manuell Ticket erstellen:</label>';
+        html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Ticket erstellen (KI-Anweisung optional):</label>';
         html += '<div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">';
         html += '<input type="text" id="ai-prompt" style="flex:1; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" placeholder="z.B. Nichtkeimung innerhalb Kulanz, falsche Menge...">';
         html += '<button class="btn-mrh" style="white-space:nowrap;" onclick="generateAiText(' + data.reclamation_id + ')"><i class="fa-solid fa-wand-magic-sparkles"></i> KI-Text</button>';
@@ -961,7 +1019,7 @@
       });
     }
     
-    // === Zoho Desk Ticket erstellen ===
+    // === Zoho Desk Ticket erstellen + Mail an Kunden senden ===
     function createZohoTicket(reclId) {
       var subject = document.getElementById('ticket-subject').value.trim();
       var message = document.getElementById('ticket-message').value.trim();
@@ -972,7 +1030,9 @@
         return;
       }
       
-      showTicketStatus('info', '<i class="fa-solid fa-spinner fa-spin"></i> Erstelle Ticket...');
+      showTicketStatus('info', '<i class="fa-solid fa-spinner fa-spin"></i> Erstelle Ticket und sende Mail...');
+      
+      var savedToken = '';
       
       // Zuerst Zoho-Token holen
       fetch(DASHBOARD_URL + '?ajax=zoho_token')
@@ -980,17 +1040,18 @@
       .then(function(tokenData) {
         if (!tokenData.success) {
           showTicketStatus('error', 'Token-Fehler: ' + (tokenData.message || 'Unbekannt'));
-          return;
+          return Promise.reject('token_error');
         }
+        savedToken = tokenData.token;
         
         // Ticket bei Zoho erstellen
         var fd = new FormData();
-        fd.append('token', tokenData.token);
         fd.append('subject', subject);
         fd.append('description', message);
         fd.append('email', email);
+        fd.append('contact_name', document.getElementById('ticket-email').getAttribute('data-name') || '');
         
-        return fetch(CATALOG_URL + 'zoho_desk_api.php?action=create_ticket&token=' + tokenData.token, {
+        return fetch(CATALOG_URL + 'zoho_desk_api.php?action=create_ticket&token=' + savedToken, {
           method: 'POST',
           body: fd
         });
@@ -999,17 +1060,41 @@
       .then(function(d) {
         if (!d) return;
         if (d.success) {
-          var linkHtml = '';
-          if (d.web_url) {
-            linkHtml = ' <a href="' + d.web_url + '" target="_blank" style="color:#fff; text-decoration:underline;">In Zoho oeffnen</a>';
-          }
-          showTicketStatus('success', '<i class="fa-solid fa-check-circle"></i> ' + d.message + linkHtml);
+          // Ticket-ID in unserer DB speichern
+          var saveFd = new FormData();
+          saveFd.append('reclamation_id', reclId);
+          saveFd.append('ticket_id', d.ticket_id);
+          saveFd.append('ticket_nr', d.ticket_nr || '');
+          fetch(DASHBOARD_URL + '?ajax=save_ticket_id', { method: 'POST', body: saveFd });
+          
+          // Jetzt Reply senden damit Kunde die Mail bekommt
+          var replyFd = new FormData();
+          replyFd.append('ticket_id', d.ticket_id);
+          replyFd.append('to', email);
+          replyFd.append('content', '<div>' + message.replace(/\n/g, '<br>') + '</div>');
+          
+          return fetch(CATALOG_URL + 'zoho_desk_api.php?action=reply&token=' + savedToken, {
+            method: 'POST',
+            body: replyFd
+          }).then(function(r2) { return r2.json(); }).then(function(replyData) {
+            var linkHtml = '';
+            if (d.web_url) {
+              linkHtml = ' <a href="' + d.web_url + '" target="_blank" style="color:#155724; text-decoration:underline;">In Zoho oeffnen</a>';
+            }
+            if (replyData && replyData.success) {
+              showTicketStatus('success', '<i class="fa-solid fa-check-circle"></i> Ticket #' + (d.ticket_nr || d.ticket_id) + ' erstellt + Mail an Kunden gesendet.' + linkHtml);
+            } else {
+              showTicketStatus('success', '<i class="fa-solid fa-check-circle"></i> Ticket erstellt, aber Mail-Versand fehlgeschlagen: ' + (replyData ? replyData.error : 'Unbekannt') + linkHtml);
+            }
+          });
         } else {
           showTicketStatus('error', 'Zoho-Fehler: ' + d.error);
         }
       })
       .catch(function(err) {
-        showTicketStatus('error', 'Netzwerkfehler: ' + err.message);
+        if (err !== 'token_error') {
+          showTicketStatus('error', 'Netzwerkfehler: ' + err.message);
+        }
       });
     }
     

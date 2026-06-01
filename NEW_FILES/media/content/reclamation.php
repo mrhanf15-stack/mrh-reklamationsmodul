@@ -438,18 +438,29 @@
             break;
           }
 
-          // === Reklamation in DB speichern ===
-          $sql_data_array = array(
-            'orders_id' => $orders_id,
-            'customers_name' => xtc_db_input($orders['customers_name']),
-            'customers_email' => xtc_db_input($orders['customers_email_address']),
-            'reclamation_date' => 'now()',
-            'reclamation_status' => 'open',
-            'ip_address' => xtc_db_input($_SERVER['REMOTE_ADDR']),
-          );
-          xtc_db_perform(TABLE_ORDERS_RECLAMATION, $sql_data_array);
+          // === Reklamation in DB speichern (oder bestehende erweitern) ===
+          // Pruefen ob fuer diese Bestellung bereits eine offene/aktive Reklamation existiert
+          $existing_recl_q = xtc_db_query("SELECT reclamation_id FROM " . TABLE_ORDERS_RECLAMATION . " WHERE orders_id = '" . (int)$orders_id . "' AND reclamation_status IN ('open','in_progress') ORDER BY reclamation_date DESC LIMIT 1");
+          $existing_recl = xtc_db_fetch_array($existing_recl_q);
           
-          $reclamation_id = xtc_db_insert_id();
+          if ($existing_recl) {
+            // Bestehende Reklamation erweitern (Produkte/Bilder hinzufuegen)
+            $reclamation_id = (int)$existing_recl['reclamation_id'];
+            // Datum aktualisieren damit man sieht dass etwas Neues hinzukam
+            xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET reclamation_date = NOW() WHERE reclamation_id = '" . $reclamation_id . "'");
+          } else {
+            // Neue Reklamation erstellen
+            $sql_data_array = array(
+              'orders_id' => $orders_id,
+              'customers_name' => xtc_db_input($orders['customers_name']),
+              'customers_email' => xtc_db_input($orders['customers_email_address']),
+              'reclamation_date' => 'now()',
+              'reclamation_status' => 'open',
+              'ip_address' => xtc_db_input($_SERVER['REMOTE_ADDR']),
+            );
+            xtc_db_perform(TABLE_ORDERS_RECLAMATION, $sql_data_array);
+            $reclamation_id = xtc_db_insert_id();
+          }
           $_SESSION['reclamation'][(int)$_REQUEST['oID']]['reclamation_id'] = $reclamation_id;
 
           // Produkte speichern

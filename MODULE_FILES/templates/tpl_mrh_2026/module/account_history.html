@@ -42,7 +42,7 @@
         </div>
         {* === Reklamation einreichen Button === *}
         <div class="mt-2 pt-2 border-top">
-          <a href="reklamation.html?oID={$order_data.ORDER_ID}&auto=1" 
+          <a href="reklamation.html?oID={$order_data.ORDER_ID}&amp;auto=1" 
              class="btn btn-sm btn-outline-danger recl-btn" 
              data-order-date="{$order_data.ORDER_DATE}"
              data-order-id="{$order_data.ORDER_ID}">
@@ -63,7 +63,7 @@
   {$BUTTON_BACK}
 </div>
 
-<script>
+{literal}<script>
 (function() {
   // Deutsche Monatsnamen fuer Datum-Parsing
   var months = {
@@ -112,4 +112,4 @@
     }
   });
 })();
-</script>
+</script>{/literal}

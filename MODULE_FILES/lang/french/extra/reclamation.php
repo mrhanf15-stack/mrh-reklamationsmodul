@@ -125,3 +125,4 @@
   // Bouton historique commandes
   define('TEXT_RECLAMATION_BTN_SUBMIT', 'Soumettre une r&eacute;clamation');
   define('TEXT_RECLAMATION_BTN_EXPIRED', 'D&eacute;lai de r&eacute;clamation expir&eacute; (60 jours)');
+  define('TEXT_RECLAMATION_BTN_TOO_EARLY', 'R&eacute;clamation pas encore possible (10 jours d\'attente)');

@@ -126,3 +126,4 @@
   // Bestellhistorie Button
   define('TEXT_RECLAMATION_BTN_SUBMIT', 'Reklamation einreichen');
   define('TEXT_RECLAMATION_BTN_EXPIRED', 'Reklamationsfrist abgelaufen (60 Tage)');
+  define('TEXT_RECLAMATION_BTN_TOO_EARLY', 'Reklamation noch nicht m&ouml;glich (10 Tage Wartezeit)');

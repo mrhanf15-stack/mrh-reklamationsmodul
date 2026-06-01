@@ -125,3 +125,4 @@
   // Bot&oacute;n historial de pedidos
   define('TEXT_RECLAMATION_BTN_SUBMIT', 'Presentar reclamaci&oacute;n');
   define('TEXT_RECLAMATION_BTN_EXPIRED', 'Plazo de reclamaci&oacute;n expirado (60 d&iacute;as)');
+  define('TEXT_RECLAMATION_BTN_TOO_EARLY', 'Reclamaci&oacute;n a&uacute;n no posible (10 d&iacute;as de espera)');

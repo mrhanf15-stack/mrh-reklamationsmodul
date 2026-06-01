@@ -126,3 +126,4 @@
   // Order history button
   define('TEXT_RECLAMATION_BTN_SUBMIT', 'Submit complaint');
   define('TEXT_RECLAMATION_BTN_EXPIRED', 'Complaint period expired (60 days)');
+  define('TEXT_RECLAMATION_BTN_TOO_EARLY', 'Complaint not yet possible (10 days waiting period)');

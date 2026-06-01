@@ -480,35 +480,98 @@ function toggleSeedQuestions(select, opId) {
   }
 }
 
+// Globale Liste der akzeptierten Dateien
+var selectedFiles = [];
+var MAX_FILE_SIZE_MB = 10; // Max 10 MB pro Bild
+
 function previewImages(input) {
   var preview = document.getElementById('image_preview');
   preview.innerHTML = '';
+  selectedFiles = [];
+  var sizeWarnings = [];
   
   if (input.files && input.files.length > 0) {
     var maxFiles = Math.min(input.files.length, 5);
     for (var i = 0; i < maxFiles; i++) {
       var file = input.files[i];
-      if (file.type.match('image.*')) {
-        var reader = new FileReader();
-        reader.onload = (function(f) {
-          return function(e) {
-            var div = document.createElement('div');
-            div.style.cssText = 'position:relative;display:inline-block;';
-            div.innerHTML = '<img src="' + e.target.result + '" style="max-height:80px;border-radius:4px;border:1px solid #dee2e6;">' +
-                            '<small class="d-block text-center text-muted" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + f.name + '</small>';
-            preview.appendChild(div);
-          };
-        })(file);
-        reader.readAsDataURL(file);
+      if (!file.type.match('image.*')) continue;
+      
+      // Groessenprüfung
+      var fileSizeMB = (file.size / 1024 / 1024).toFixed(1);
+      if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        sizeWarnings.push(file.name + ' (' + fileSizeMB + ' MB)');
+        continue; // Datei nicht hinzufuegen
       }
+      
+      selectedFiles.push(file);
+    }
+    
+    // Vorschau rendern
+    selectedFiles.forEach(function(file, idx) {
+      var reader = new FileReader();
+      reader.onload = (function(f, index) {
+        return function(e) {
+          var div = document.createElement('div');
+          div.style.cssText = 'position:relative;display:inline-block;margin:0.25rem;';
+          div.setAttribute('data-file-index', index);
+          div.innerHTML = '<img src="' + e.target.result + '" style="max-height:80px;border-radius:4px;border:1px solid #dee2e6;">' +
+                          '<button type="button" onclick="removeImage(' + index + ')" style="position:absolute;top:-6px;right:-6px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:20px;text-align:center;cursor:pointer;padding:0;" title="Entfernen">&times;</button>' +
+                          '<small class="d-block text-center text-muted" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + f.name + '</small>';
+          preview.appendChild(div);
+        };
+      })(file, idx);
+      reader.readAsDataURL(file);
+    });
+    
+    // Groessen-Warnung anzeigen
+    if (sizeWarnings.length > 0) {
+      var warn = document.createElement('div');
+      warn.className = 'alert alert-danger mt-2 w-100';
+      warn.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> <strong>Zu gro\u00dfe Bilder (max. ' + MAX_FILE_SIZE_MB + ' MB):</strong><br>' + sizeWarnings.join(', ') + '<br><small>Bitte verkleinere die Bilder oder w\u00e4hle andere.</small>';
+      preview.appendChild(warn);
     }
     
     if (input.files.length > 5) {
-      var warn = document.createElement('div');
-      warn.className = 'alert alert-warning mt-2 w-100';
-      warn.textContent = '{$smarty.const.TEXT_RECLAMATION_UPLOAD_MAX_WARNING}';
-      preview.appendChild(warn);
+      var warn2 = document.createElement('div');
+      warn2.className = 'alert alert-warning mt-2 w-100';
+      warn2.textContent = '{$smarty.const.TEXT_RECLAMATION_UPLOAD_MAX_WARNING}';
+      preview.appendChild(warn2);
     }
+    
+    // FileList aktualisieren
+    updateFileInput();
   }
+}
+
+function removeImage(index) {
+  selectedFiles.splice(index, 1);
+  updateFileInput();
+  // Vorschau neu rendern
+  var preview = document.getElementById('image_preview');
+  preview.innerHTML = '';
+  selectedFiles.forEach(function(file, idx) {
+    var reader = new FileReader();
+    reader.onload = (function(f, i) {
+      return function(e) {
+        var div = document.createElement('div');
+        div.style.cssText = 'position:relative;display:inline-block;margin:0.25rem;';
+        div.innerHTML = '<img src="' + e.target.result + '" style="max-height:80px;border-radius:4px;border:1px solid #dee2e6;">' +
+                        '<button type="button" onclick="removeImage(' + i + ')" style="position:absolute;top:-6px;right:-6px;background:#e74c3c;color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:20px;text-align:center;cursor:pointer;padding:0;" title="Entfernen">&times;</button>' +
+                        '<small class="d-block text-center text-muted" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + f.name + '</small>';
+        preview.appendChild(div);
+      };
+    })(file, idx);
+    reader.readAsDataURL(file);
+  });
+  if (selectedFiles.length === 0) {
+    preview.innerHTML = '';
+  }
+}
+
+function updateFileInput() {
+  // DataTransfer nutzen um FileList zu aktualisieren
+  var dt = new DataTransfer();
+  selectedFiles.forEach(function(f) { dt.items.add(f); });
+  document.getElementById('reclamation_images').files = dt.files;
 }
 </script>

@@ -93,6 +93,7 @@
   define('TEXT_RECLAMATION_UPLOAD_HEADING', 'T&eacute;l&eacute;charger des photos');
   define('TEXT_RECLAMATION_UPLOAD_INFO', 'T&eacute;l&eacute;chargez des photos du produit endommag&eacute;, de l\'emballage ou du probl&egrave;me. Les photos acc&eacute;l&egrave;rent consid&eacute;rablement le traitement.');
   define('TEXT_RECLAMATION_UPLOAD_HINT', 'Max. 5 images, chacune max. 10 Mo. Formats autoris&eacute;s : JPG, PNG, HEIC, WebP.');
+  define('TEXT_RECLAMATION_UPLOAD_RECOMMENDED', 'Une photo n&rsquo;est pas obligatoire, mais augmente consid&eacute;rablement les chances d&rsquo;un traitement rapide et positif de votre r&eacute;clamation !');
   define('TEXT_RECLAMATION_UPLOAD_MAX_WARNING', 'Maximum 5 images autoris&eacute;es. Seules les 5 premi&egrave;res seront t&eacute;l&eacute;charg&eacute;es.');
   define('TEXT_RECLAMATION_IMAGE_RIGHTS', 'Je confirme que je d&eacute;tiens les droits sur les images t&eacute;l&eacute;charg&eacute;es et qu\'elles peuvent &ecirc;tre utilis&eacute;es pour traiter ma r&eacute;clamation.');
   define('TEXT_RECLAMATION_IMAGE_RIGHTS_ERROR', 'Veuillez confirmer les droits d\'image avant de t&eacute;l&eacute;charger des photos.');

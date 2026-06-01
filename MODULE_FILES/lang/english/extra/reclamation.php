@@ -93,6 +93,7 @@
   define('TEXT_RECLAMATION_UPLOAD_HEADING', 'Upload photos');
   define('TEXT_RECLAMATION_UPLOAD_INFO', 'Upload photos of the damaged product, packaging or the problem. Photos significantly speed up the processing.');
   define('TEXT_RECLAMATION_UPLOAD_HINT', 'Max. 5 images, each max. 10 MB. Allowed formats: JPG, PNG, HEIC, WebP.');
+  define('TEXT_RECLAMATION_UPLOAD_RECOMMENDED', 'A photo is not mandatory, but significantly increases the chance of a quick and positive resolution of your complaint!');
   define('TEXT_RECLAMATION_UPLOAD_MAX_WARNING', 'Maximum 5 images allowed. Only the first 5 will be uploaded.');
   define('TEXT_RECLAMATION_IMAGE_RIGHTS', 'I confirm that I own the rights to the uploaded images and that they may be used to process my complaint.');
   define('TEXT_RECLAMATION_IMAGE_RIGHTS_ERROR', 'Please confirm the image rights before uploading photos.');

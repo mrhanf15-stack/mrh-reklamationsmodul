@@ -208,17 +208,7 @@
                                   <option value="other">{$smarty.const.TEXT_RECLAMATION_REASON_OTHER}</option>
                                 </select>
                               </div>
-                              <div class="col-md-6">
-                                <label class="form-label">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP} *</label>
-                                <select class="form-select" name="seed_temp_{$order_data.ORDERS_PRODUCTS_ID}">
-                                  <option value="">{$smarty.const.TEXT_RECLAMATION_REASON_SELECT}</option>
-                                  <option value="under_18">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_UNDER18}</option>
-                                  <option value="18_22">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_18_22}</option>
-                                  <option value="22_26">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_22_26}</option>
-                                  <option value="over_26">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_OVER26}</option>
-                                  <option value="unknown">{$smarty.const.TEXT_RECLAMATION_SEED_TEMP_UNKNOWN}</option>
-                                </select>
-                              </div>
+
                               <div class="col-md-6">
                                 <label class="form-label">{$smarty.const.TEXT_RECLAMATION_SEED_DAYS} *</label>
                                 <select class="form-select" name="seed_days_{$order_data.ORDERS_PRODUCTS_ID}">
@@ -346,6 +336,10 @@
               </div>
               <div class="card-body">
                 <p class="text-body-secondary small">{$smarty.const.TEXT_RECLAMATION_UPLOAD_INFO}</p>
+                <div class="alert alert-info py-2 px-3 small mb-3">
+                  <span class="fa-solid fa-circle-info me-1"></span>
+                  <strong>{$smarty.const.TEXT_RECLAMATION_UPLOAD_RECOMMENDED}</strong>
+                </div>
                 
                 <div class="mb-3">
                   <input type="file" class="form-control" name="reclamation_images[]" id="reclamation_images" multiple accept="image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp" onchange="previewImages(this)">

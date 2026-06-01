@@ -93,6 +93,7 @@
   define('TEXT_RECLAMATION_UPLOAD_HEADING', 'Fotos hochladen');
   define('TEXT_RECLAMATION_UPLOAD_INFO', 'Laden Sie Fotos des besch&auml;digten Produkts, der Verpackung oder des Problems hoch. Fotos beschleunigen die Bearbeitung erheblich.');
   define('TEXT_RECLAMATION_UPLOAD_HINT', 'Max. 5 Bilder, je max. 10 MB. Erlaubte Formate: JPG, PNG, HEIC, WebP.');
+  define('TEXT_RECLAMATION_UPLOAD_RECOMMENDED', 'Ein Foto ist nicht Pflicht, erh&ouml;ht aber die Chance auf eine schnelle und positive Bearbeitung deiner Reklamation erheblich!');
   define('TEXT_RECLAMATION_UPLOAD_MAX_WARNING', 'Maximal 5 Bilder erlaubt. Nur die ersten 5 werden hochgeladen.');
   define('TEXT_RECLAMATION_IMAGE_RIGHTS', 'Ich best&auml;tige, dass ich die Rechte an den hochgeladenen Bildern besitze und diese zur Bearbeitung meiner Reklamation verwendet werden d&uuml;rfen.');
   define('TEXT_RECLAMATION_IMAGE_RIGHTS_ERROR', 'Bitte best&auml;tigen Sie die Bildrechte, bevor Sie Fotos hochladen.');

@@ -57,6 +57,7 @@
     defined('MODULE_CAPTCHA_LOGGED_IN') or define('MODULE_CAPTCHA_LOGGED_IN', 'True');
     
     $action = isset($_GET['action']) && $_GET['action'] != '' ? $_GET['action'] : '';
+
     $privacy = isset($_POST['privacy']) && $_POST['privacy'] == 'privacy' ? true : false;
     
     if (!isset($smarty) || !is_object($smarty)) {
@@ -412,17 +413,14 @@
               // Samen-spezifische Felder
               if ($ptype == 'seed') {
                 $product_data['seed_germination_method'] = isset($_POST['seed_germ_method_' . (int)$op_id]) ? xtc_db_prepare_input($_POST['seed_germ_method_' . (int)$op_id]) : '';
-                $product_data['seed_temperature'] = isset($_POST['seed_temp_' . (int)$op_id]) ? xtc_db_prepare_input($_POST['seed_temp_' . (int)$op_id]) : '';
+
                 $product_data['seed_days_waited'] = isset($_POST['seed_days_' . (int)$op_id]) ? xtc_db_prepare_input($_POST['seed_days_' . (int)$op_id]) : '';
                 $product_data['seed_count_failed'] = isset($_POST['seed_count_' . (int)$op_id]) ? (int)$_POST['seed_count_' . (int)$op_id] : 0;
                 $product_data['seed_stored_correctly'] = isset($_POST['seed_stored_' . (int)$op_id]) ? 1 : 0;
                 $product_data['seed_expected_strain'] = isset($_POST['seed_expected_' . (int)$op_id]) ? xtc_db_prepare_input($_POST['seed_expected_' . (int)$op_id]) : '';
                 $product_data['seed_received_strain'] = isset($_POST['seed_received_' . (int)$op_id]) ? xtc_db_prepare_input($_POST['seed_received_' . (int)$op_id]) : '';
                 
-                // Samen: Bildupload Pflicht (wird spaeter geprueft)
-                if ($reason != 'other') {
-                  $product_data['image_required'] = true;
-                }
+                // Samen: Bildupload empfohlen (aber nicht Pflicht)
               }
               
               $sql_products[] = $product_data;
@@ -434,22 +432,7 @@
             $messageStack->add('reclamation', TEXT_RECLAMATION_NO_PRODUCTS_SELECTED);
           }
           
-          // Samen-Bildpflicht pruefen
-          if (!$error) {
-            $has_seed_with_image_required = false;
-            foreach ($sql_products as $sp) {
-              if (isset($sp['image_required']) && $sp['image_required']) {
-                $has_seed_with_image_required = true;
-                break;
-              }
-            }
-            if ($has_seed_with_image_required) {
-              if (!isset($_FILES['reclamation_images']) || empty($_FILES['reclamation_images']['name'][0])) {
-                $error = true;
-                $messageStack->add('reclamation', TEXT_RECLAMATION_SEED_IMAGE_REQUIRED);
-              }
-            }
-          }
+          // Samen-Bildupload ist optional (Hinweis im Template)
 
           if ($error === true) {
             break;

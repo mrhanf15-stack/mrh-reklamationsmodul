@@ -93,6 +93,7 @@
   define('TEXT_RECLAMATION_UPLOAD_HEADING', 'Subir fotos');
   define('TEXT_RECLAMATION_UPLOAD_INFO', 'Suba fotos del producto da&ntilde;ado, del embalaje o del problema. Las fotos aceleran considerablemente el procesamiento.');
   define('TEXT_RECLAMATION_UPLOAD_HINT', 'M&aacute;x. 5 im&aacute;genes, cada una m&aacute;x. 10 MB. Formatos permitidos: JPG, PNG, HEIC, WebP.');
+  define('TEXT_RECLAMATION_UPLOAD_RECOMMENDED', 'Una foto no es obligatoria, pero aumenta considerablemente las posibilidades de un tratamiento r&aacute;pido y positivo de tu reclamaci&oacute;n.');
   define('TEXT_RECLAMATION_UPLOAD_MAX_WARNING', 'M&aacute;ximo 5 im&aacute;genes permitidas. Solo se subir&aacute;n las 5 primeras.');
   define('TEXT_RECLAMATION_IMAGE_RIGHTS', 'Confirmo que poseo los derechos de las im&aacute;genes subidas y que pueden utilizarse para procesar mi reclamaci&oacute;n.');
   define('TEXT_RECLAMATION_IMAGE_RIGHTS_ERROR', 'Por favor, confirme los derechos de imagen antes de subir fotos.');

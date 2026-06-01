@@ -182,6 +182,37 @@
           . "Bestellung: #" . $recl['orders_id'] . "\n"
           . "Reklamierte Produkte:\n" . $product_info;
         
+        // === Konversationsverlauf laden falls Ticket existiert ===
+        if (!empty($recl['zoho_ticket_id'])) {
+          $secret_q_ai = xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = 'MODULE_ZOHO_DESK_CLIENT_SECRET'");
+          $secret_row_ai = xtc_db_fetch_array($secret_q_ai);
+          $token_ai = hash_hmac('sha256', date('Y-m-d'), $secret_row_ai['configuration_value'] ?? '');
+          $catalog_url_ai = (defined('HTTPS_CATALOG_SERVER') ? HTTPS_CATALOG_SERVER : HTTP_CATALOG_SERVER) . DIR_WS_CATALOG;
+          $conv_url_ai = $catalog_url_ai . 'zoho_desk_api.php?action=conversations&ticket_id=' . $recl['zoho_ticket_id'] . '&token=' . $token_ai;
+          $ch_conv = curl_init($conv_url_ai);
+          curl_setopt_array($ch_conv, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_SSL_VERIFYPEER => false));
+          $conv_resp_ai = curl_exec($ch_conv);
+          curl_close($ch_conv);
+          $conv_data_ai = json_decode($conv_resp_ai, true);
+          
+          if (!empty($conv_data_ai['conversations'])) {
+            $user_message .= "\n\n=== BISHERIGER KONVERSATIONSVERLAUF (aelteste zuerst) ===\n";
+            // Umkehren: aelteste zuerst
+            $convs_reversed = array_reverse($conv_data_ai['conversations']);
+            foreach ($convs_reversed as $conv_thread) {
+              $direction_label = ($conv_thread['direction'] == 'in') ? 'KUNDE' : 'SUPPORT (Mr. Hanf)';
+              $author_label = (!empty($conv_thread['author']['name'])) ? $conv_thread['author']['name'] : $direction_label;
+              $conv_content = !empty($conv_thread['content']) ? strip_tags($conv_thread['content']) : ($conv_thread['summary'] ?? '');
+              // Auf 500 Zeichen pro Nachricht begrenzen
+              if (strlen($conv_content) > 500) $conv_content = substr($conv_content, 0, 500) . '...';
+              $conv_time = !empty($conv_thread['createdTime']) ? date('d.m.Y H:i', strtotime($conv_thread['createdTime'])) : '';
+              $user_message .= "\n[" . $direction_label . " - " . $author_label . " - " . $conv_time . "]:\n" . trim($conv_content) . "\n";
+            }
+            $user_message .= "\n=== ENDE VERLAUF ===\n";
+            $user_message .= "\nBitte antworte gezielt auf die LETZTE Kundennachricht im Verlauf. Beruecksichtige den gesamten Kontext der bisherigen Kommunikation.";
+          }
+        }
+        
         if (!empty($custom_prompt)) {
           $user_message .= "\nZusaetzliche Anweisung: " . $custom_prompt;
         }
@@ -629,7 +660,7 @@
                   );
                   $status_label = isset($status_labels[$recl['reclamation_status']]) ? $status_labels[$recl['reclamation_status']] : $recl['reclamation_status'];
                 ?>
-                <tr onclick="showDetail(<?php echo (int)$recl['reclamation_id']; ?>)">
+                <tr data-recl-id="<?php echo (int)$recl['reclamation_id']; ?>" onclick="showDetail(<?php echo (int)$recl['reclamation_id']; ?>)">
                   <td><strong><?php echo (int)$recl['reclamation_id']; ?></strong></td>
                   <td><a href="<?php echo $admin_url; ?>orders.php?oID=<?php echo (int)$recl['orders_id']; ?>&action=edit" onclick="event.stopPropagation();" style="color:#c0392b; font-weight:600;"><?php echo (int)$recl['orders_id']; ?></a></td>
                   <td><?php echo htmlspecialchars($recl['customers_name']); ?></td>
@@ -1244,16 +1275,50 @@
       });
     }
     
-    // === Unread-Check beim Seitenaufruf ===
-    fetch(DASHBOARD_URL + '?ajax=check_unread')
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (d.success && d.unread) {
-          // Badges in der Tabelle aktualisieren (fuer dynamische Updates)
-          // Die PHP-Seite zeigt bereits die gespeicherten Werte an
-        }
-      })
-      .catch(function() {});
+    // === Unread-Check beim Seitenaufruf + periodisch alle 60s ===
+    function checkUnreadBadges() {
+      fetch(DASHBOARD_URL + '?ajax=check_unread')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.success && d.unread) {
+            // Badges in der Tabelle dynamisch aktualisieren
+            var rows = document.querySelectorAll('tr[data-recl-id]');
+            rows.forEach(function(row) {
+              var reclId = parseInt(row.getAttribute('data-recl-id'));
+              var ticketCell = row.querySelectorAll('td')[5]; // 6. Spalte = Ticket
+              if (!ticketCell) return;
+              
+              var unreadCount = d.unread[reclId] || 0;
+              var existingBadge = ticketCell.querySelector('.unread-badge');
+              
+              if (unreadCount > 0) {
+                if (existingBadge) {
+                  // Badge aktualisieren
+                  existingBadge.innerHTML = '<i class="fa-solid fa-envelope"></i> ' + unreadCount;
+                  existingBadge.title = unreadCount + ' neue Antwort(en)';
+                } else {
+                  // Badge neu erstellen (nur wenn Ticket vorhanden)
+                  var ticketBadge = ticketCell.querySelector('.ticket-badge');
+                  if (ticketBadge) {
+                    var badge = document.createElement('span');
+                    badge.className = 'unread-badge';
+                    badge.title = unreadCount + ' neue Antwort(en)';
+                    badge.innerHTML = '<i class="fa-solid fa-envelope"></i> ' + unreadCount;
+                    ticketBadge.insertAdjacentElement('afterend', badge);
+                  }
+                }
+              } else {
+                // Badge entfernen wenn keine ungelesenen mehr
+                if (existingBadge) existingBadge.remove();
+              }
+            });
+          }
+        })
+        .catch(function() {});
+    }
+    // Sofort pruefen und dann alle 60 Sekunden
+    checkUnreadBadges();
+    setInterval(checkUnreadBadges, 60000);
 
     function escHtml(str) {
       if (!str) return '';

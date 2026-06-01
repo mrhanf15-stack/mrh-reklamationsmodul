@@ -59,6 +59,37 @@
     $action = isset($_GET['action']) && $_GET['action'] != '' ? $_GET['action'] : '';
 
     $privacy = isset($_POST['privacy']) && $_POST['privacy'] == 'privacy' ? true : false;
+
+    // === Auto-Login fuer eingeloggte Kunden aus Bestellhistorie ===
+    if (isset($_GET['auto']) && $_GET['auto'] == '1' && isset($_GET['oID']) && isset($_SESSION['customer_id'])) {
+      $auto_oid = (int)$_GET['oID'];
+      // Pruefen ob Bestellung dem eingeloggten Kunden gehoert
+      $auto_order_q = xtc_db_query("SELECT * FROM " . TABLE_ORDERS . " WHERE orders_id = '" . $auto_oid . "' AND customers_id = '" . (int)$_SESSION['customer_id'] . "'");
+      if (xtc_db_num_rows($auto_order_q) > 0) {
+        $auto_order = xtc_db_fetch_array($auto_order_q);
+        // 60-Tage-Frist pruefen
+        $order_age_days = (int)((time() - strtotime($auto_order['date_purchased'])) / 86400);
+        if ($order_age_days <= 60) {
+          // Versandstatus pruefen
+          $auto_shipped_q = xtc_db_query("SELECT COUNT(*) as cnt FROM orders_status_history WHERE orders_id = '" . $auto_oid . "' AND orders_status_id = 3");
+          $auto_shipped = xtc_db_fetch_array($auto_shipped_q);
+          if ((int)$auto_shipped['cnt'] >= 1) {
+            // Alles OK - direkt zur Produktwahl
+            $_SESSION['reclamation'][$auto_oid] = array(
+              'valid' => true,
+              'success' => false,
+              'orders_id' => $auto_oid,
+              'email_address' => $auto_order['customers_email_address'],
+              'orders' => $auto_order,
+            );
+            $action = 'products';
+            $_GET['action'] = 'products';
+            $_GET['oID'] = $auto_oid;
+            $_REQUEST['oID'] = $auto_oid;
+          }
+        }
+      }
+    }
     
     if (!isset($smarty) || !is_object($smarty)) {
       $smarty = new Smarty();
@@ -307,6 +338,12 @@
           if (xtc_db_num_rows($orders_query) < 1) {          
             $messageStack->add('reclamation', TEXT_RECLAMATION_ORDER_NOT_FOUND);
           } else {
+            // 60-Tage-Frist pruefen
+            $order_data_tmp = xtc_db_fetch_array($orders_query);
+            $order_age_days_check = (int)((time() - strtotime($order_data_tmp['date_purchased'])) / 86400);
+            if ($order_age_days_check > 60) {
+              $messageStack->add('reclamation', TEXT_RECLAMATION_EXPIRED);
+            } else {
             // Rate-Limiting: Max 3 Reklamationen pro Bestellung
             $rate_check = xtc_db_query("SELECT COUNT(*) as cnt FROM " . TABLE_ORDERS_RECLAMATION . " WHERE orders_id = '" . (int)$orders_id . "'");
             $rate_row = xtc_db_fetch_array($rate_check);
@@ -324,7 +361,7 @@
                   'success' => false,
                   'orders_id' => $orders_id,
                   'email_address' => $email_address,
-                  'orders' => xtc_db_fetch_array($orders_query),
+                  'orders' => $order_data_tmp,
                 );
                 // Kein Redirect – direkt action umschalten damit Session erhalten bleibt
                 $_GET['action'] = 'products';
@@ -333,6 +370,7 @@
                 $action = 'products';
               }
             }
+            } // Ende 60-Tage-Frist
           }
         }
         break;

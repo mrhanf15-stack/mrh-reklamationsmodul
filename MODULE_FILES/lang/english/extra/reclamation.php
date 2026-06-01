@@ -17,6 +17,7 @@
   define('TEXT_RECLAMATION_ORDER_NOT_FOUND', 'Order not found. Please check your order number and email address.');
   define('TEXT_RECLAMATION_NOT_SHIPPED', 'This order has not yet been shipped. A complaint is only possible after receiving the goods.');
   define('TEXT_RECLAMATION_RATE_LIMIT', 'The maximum number of complaints has already been submitted for this order. Please contact our customer service.');
+  define('TEXT_RECLAMATION_EXPIRED', 'The complaint period for this order has expired (max. 60 days after order date). Please contact our customer service.');
 
   // Success
   define('TEXT_RECLAMATION_SUCCESS', 'Thank you for your complaint.<br/>We have successfully received your request and will process it as soon as possible.<br/><br/>Our team is reviewing your details and will take care of the next steps. You will shortly receive a confirmation by email.');

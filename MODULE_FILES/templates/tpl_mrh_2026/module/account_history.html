@@ -1,0 +1,110 @@
+{config_load file="$language/lang_$language.conf" section="account"}
+{config_load file="$language/lang_$language.conf" section="account_history"}
+{config_load file="lang_`$language`.custom"}
+{config_load file="lang_`$language`.section" section="account_history"}
+<h1 class="mb-4">{#heading_history#}</h1>
+
+<div class="row row-cols-1 row-cols-md-2 g-4">
+  {foreach name=aussen item=order_data from=$order_content}
+  <div class="col">
+    <div class="card h-100">
+      <div class="card-header">
+        <h5 class="card-title mb-0">
+          <a href="{$order_data.ORDER_LINK}" class="text-decoration-none">
+            {#text_oid#}{$order_data.ORDER_ID}
+          </a>
+        </h5>
+      </div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <div>
+            <p class="mb-1">
+              <strong><a href="{$order_data.ORDER_LINK}" class="text-decoration-none">{$order_data.ORDER_DATE}</a></strong>
+              <span class="text-muted">/ {#order_nr#}{$order_data.ORDER_ID}</span>
+            </p>
+            <p class="mb-1"><strong>{#text_total#}</strong> {$order_data.ORDER_TOTAL}</p>
+            <p class="mb-1"><strong>{#text_status#}</strong> {$order_data.ORDER_STATUS}</p>
+            {if count($order_data.ORDER_TRACKING) > 0}
+              {foreach name=aussen item=tracking_data from=$order_data.ORDER_TRACKING}
+                <p class="mb-1">
+                  {#label_tracking#} 
+                  <a target="_blank" href="{$tracking_data.tracking_link}" class="text-decoration-none">
+                    {$tracking_data.parcel_id}
+                  </a>
+                </p>
+              {/foreach}
+            {/if}
+          </div>
+          <div class="text-end">
+            {if isset($order_data.BUTTON_CART_EXPRESS)}{$order_data.BUTTON_CART_EXPRESS}{/if}
+            {$order_data.BUTTON_CART}
+          </div>
+        </div>
+        {* === Reklamation einreichen Button === *}
+        <div class="mt-2 pt-2 border-top">
+          <a href="reklamation.html?oID={$order_data.ORDER_ID}&auto=1" 
+             class="btn btn-sm btn-outline-danger recl-btn" 
+             data-order-date="{$order_data.ORDER_DATE}"
+             data-order-id="{$order_data.ORDER_ID}">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i> Reklamation einreichen
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {/foreach}
+</div>
+
+<div class="mt-4">
+  {$PAGINATION}
+</div>
+
+<div class="mt-3 d-flex justify-content-start">
+  {$BUTTON_BACK}
+</div>
+
+<script>
+(function() {
+  // Deutsche Monatsnamen fuer Datum-Parsing
+  var months = {
+    'januar':0,'februar':1,'m\u00e4rz':2,'maerz':2,'april':3,'mai':4,'juni':5,
+    'juli':6,'august':7,'september':8,'oktober':9,'november':10,'dezember':11,
+    'january':0,'february':1,'march':2,'may':4,'june':5,'july':6,'august':7,
+    'october':9,'december':11
+  };
+  
+  function parseOrderDate(dateStr) {
+    // Format: "01. Juni 2026" oder "Montag, 01. Juni 2026"
+    var parts = dateStr.toLowerCase().replace(/,/g,'').replace(/\./g,'').trim().split(/\s+/);
+    var day, month, year;
+    for (var i = 0; i < parts.length; i++) {
+      if (months[parts[i]] !== undefined) {
+        month = months[parts[i]];
+        day = parseInt(parts[i-1]) || 1;
+        year = parseInt(parts[i+1]) || new Date().getFullYear();
+        break;
+      }
+    }
+    if (month === undefined) return null;
+    return new Date(year, month, day);
+  }
+  
+  var now = new Date();
+  var sixtyDaysAgo = new Date(now.getTime() - (60 * 24 * 60 * 60 * 1000));
+  
+  var buttons = document.querySelectorAll('.recl-btn');
+  buttons.forEach(function(btn) {
+    var dateStr = btn.getAttribute('data-order-date');
+    var orderDate = parseOrderDate(dateStr);
+    if (orderDate && orderDate < sixtyDaysAgo) {
+      btn.classList.remove('btn-outline-danger');
+      btn.classList.add('btn-outline-secondary', 'disabled');
+      btn.setAttribute('aria-disabled', 'true');
+      btn.style.pointerEvents = 'none';
+      btn.style.opacity = '0.5';
+      btn.innerHTML = '<i class="fa-solid fa-ban me-1"></i> Reklamationsfrist abgelaufen (60 Tage)';
+      btn.removeAttribute('href');
+    }
+  });
+})();
+</script>

@@ -17,6 +17,7 @@
   define('TEXT_RECLAMATION_ORDER_NOT_FOUND', 'Bestellung nicht gefunden. Bitte &uuml;berpr&uuml;fen Sie Ihre Bestellnummer und E-Mail-Adresse.');
   define('TEXT_RECLAMATION_NOT_SHIPPED', 'Diese Bestellung wurde noch nicht versendet. Eine Reklamation ist erst nach Erhalt der Ware m&ouml;glich.');
   define('TEXT_RECLAMATION_RATE_LIMIT', 'F&uuml;r diese Bestellung wurden bereits die maximale Anzahl an Reklamationen eingereicht. Bitte kontaktieren Sie unseren Kundenservice.');
+  define('TEXT_RECLAMATION_EXPIRED', 'Die Reklamationsfrist f&uuml;r diese Bestellung ist abgelaufen (max. 60 Tage nach Bestelldatum). Bitte kontaktieren Sie unseren Kundenservice.');
 
   // Erfolg
   define('TEXT_RECLAMATION_SUCCESS', 'Vielen Dank f&uuml;r Ihre Reklamation.<br/>Wir haben Ihre Anfrage erfolgreich erhalten und werden sie schnellstm&ouml;glich bearbeiten.<br/><br/>Unser Team pr&uuml;ft Ihre Angaben und k&uuml;mmert sich um die n&auml;chsten Schritte. Sie erhalten in K&uuml;rze eine Best&auml;tigung per E-Mail.');

@@ -1,0 +1,17 @@
+Tu reclamacion ha sido enviada con exito
+==========================================
+
+Hola {$CUSTOMER_NAME},
+
+Gracias por tu reclamacion. Hemos recibido tu solicitud y la procesaremos lo antes posible.
+
+Numero de pedido: {$ORDERS_ID}
+Enviada el: {$DATE}
+
+Productos reclamados:
+{$PRODUCTS_LIST}
+
+Nos pondremos en contacto contigo en un plazo de 1 a 3 dias laborables.
+
+Saludos cordiales,
+Tu equipo Mr. Hanf

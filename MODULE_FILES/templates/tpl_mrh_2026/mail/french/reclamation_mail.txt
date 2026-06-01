@@ -1,0 +1,15 @@
+Nouvelle reclamation recue
+==============================
+
+Numero de commande: {$ORDERS_ID}
+Date: {$DATE}
+Client: {$CUSTOMER_NAME}
+E-mail: {$CUSTOMER_EMAIL}
+
+Produits reclames:
+{$PRODUCTS_LIST}
+
+Statut: Nouveau / Ouvert
+
+---
+Cet e-mail a ete genere automatiquement par le module de reclamation.

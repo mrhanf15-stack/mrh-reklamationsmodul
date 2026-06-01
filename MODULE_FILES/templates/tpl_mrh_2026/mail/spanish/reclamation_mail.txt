@@ -1,0 +1,15 @@
+Nueva reclamacion recibida
+==============================
+
+Numero de pedido: {$ORDERS_ID}
+Fecha: {$DATE}
+Cliente: {$CUSTOMER_NAME}
+E-mail: {$CUSTOMER_EMAIL}
+
+Productos reclamados:
+{$PRODUCTS_LIST}
+
+Estado: Nuevo / Abierto
+
+---
+Este correo fue generado automaticamente por el modulo de reclamacion.

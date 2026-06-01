@@ -1,0 +1,17 @@
+Votre reclamation a ete soumise avec succes
+=============================================
+
+Bonjour {$CUSTOMER_NAME},
+
+Merci pour votre reclamation. Nous avons recu votre demande et la traiterons dans les plus brefs delais.
+
+Numero de commande: {$ORDERS_ID}
+Soumise le: {$DATE}
+
+Produits reclames:
+{$PRODUCTS_LIST}
+
+Nous vous recontacterons dans un delai de 1 a 3 jours ouvrables.
+
+Cordialement,
+Votre equipe Mr. Hanf

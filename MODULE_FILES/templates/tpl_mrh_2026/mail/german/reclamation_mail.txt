@@ -1,0 +1,15 @@
+Neue Reklamation eingegangen
+==============================
+
+Bestellnummer: {$ORDERS_ID}
+Datum: {$DATE}
+Kunde: {$CUSTOMER_NAME}
+E-Mail: {$CUSTOMER_EMAIL}
+
+Reklamierte Produkte:
+{$PRODUCTS_LIST}
+
+Status: Neu / Offen
+
+---
+Diese E-Mail wurde automatisch vom Reklamationsmodul generiert.

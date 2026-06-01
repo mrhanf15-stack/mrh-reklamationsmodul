@@ -1,0 +1,17 @@
+Deine Reklamation wurde erfolgreich eingereicht
+=================================================
+
+Hallo {$CUSTOMER_NAME},
+
+vielen Dank fuer deine Reklamation. Wir haben deine Anfrage erhalten und werden sie schnellstmoeglich bearbeiten.
+
+Bestellnummer: {$ORDERS_ID}
+Eingereicht am: {$DATE}
+
+Reklamierte Produkte:
+{$PRODUCTS_LIST}
+
+Wir melden uns in der Regel innerhalb von 1-3 Werktagen bei dir.
+
+Mit freundlichen Gruessen,
+Dein Mr. Hanf Team

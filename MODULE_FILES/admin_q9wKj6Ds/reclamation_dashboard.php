@@ -77,6 +77,98 @@
         }
         exit;
         
+      case 'ai_generate':
+        // KI-Textgenerierung via OpenRouter
+        $recl_id = (int)$_POST['reclamation_id'];
+        $custom_prompt = isset($_POST['custom_prompt']) ? trim($_POST['custom_prompt']) : '';
+        
+        // Reklamationsdaten laden
+        $recl = xtc_db_fetch_array(xtc_db_query("SELECT * FROM " . TABLE_ORDERS_RECLAMATION . " WHERE reclamation_id = '" . $recl_id . "'"));
+        if (!$recl) {
+          echo json_encode(array('success' => false, 'message' => 'Reklamation nicht gefunden'));
+          exit;
+        }
+        $products = array();
+        $p_query = xtc_db_query("SELECT * FROM " . TABLE_ORDERS_RECLAMATION_PRODUCTS . " WHERE reclamation_id = '" . $recl_id . "'");
+        while ($p = xtc_db_fetch_array($p_query)) {
+          $products[] = $p;
+        }
+        
+        // Kontext fuer KI zusammenbauen
+        $product_info = '';
+        foreach ($products as $p) {
+          $product_info .= '- ' . $p['products_quantity'] . 'x ' . $p['products_name'] . ' (Art.' . $p['products_model'] . '), ';
+          $product_info .= 'Grund: ' . $p['reclamation_reason'] . ', Beschreibung: ' . $p['reclamation_description'];
+          if ($p['product_category'] == 'seed') {
+            $product_info .= ', Keimmethode: ' . $p['seed_germination_method'] . ', Temp: ' . $p['seed_temperature'] . ', Tage: ' . $p['seed_days_waited'];
+          }
+          $product_info .= "\n";
+        }
+        
+        $system_prompt = "Du bist ein freundlicher Kundenservice-Mitarbeiter von Mr. Hanf (Cannabis Samen Shop). "
+          . "Schreibe eine professionelle, empathische Antwort auf eine Kundenreklamation. "
+          . "Verwende 'Du' als Anrede. Sei loesungsorientiert. "
+          . "Bei Samen-Reklamationen: Biete Kulanz an (Ersatzlieferung oder Gutschrift), "
+          . "weise darauf hin dass Keimung von vielen Faktoren abhaengt. "
+          . "Bei anderen Produkten: Biete Ersatz oder Rueckerstattung an. "
+          . "Halte die Antwort kurz (3-5 Saetze). Unterschreibe mit 'Dein Mr. Hanf Team'.";
+        
+        $user_message = "Kunde: " . $recl['customers_name'] . "\n"
+          . "Bestellung: #" . $recl['orders_id'] . "\n"
+          . "Reklamierte Produkte:\n" . $product_info;
+        
+        if (!empty($custom_prompt)) {
+          $user_message .= "\nZusaetzliche Anweisung: " . $custom_prompt;
+        }
+        
+        // OpenRouter API aufrufen - Key aus DB-Konfiguration
+        $or_key_q = xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = 'MODULE_RECLAMATION_OPENROUTER_KEY'");
+        $or_key_row = xtc_db_fetch_array($or_key_q);
+        $openrouter_key = $or_key_row['configuration_value'] ?? '';;
+        if (empty($openrouter_key)) {
+          echo json_encode(array('success' => false, 'message' => 'OpenRouter API-Key nicht konfiguriert. Bitte in der DB unter MODULE_RECLAMATION_OPENROUTER_KEY eintragen.'));
+          exit;
+        }
+        $ch = curl_init('https://openrouter.ai/api/v1/chat/completions');
+        curl_setopt_array($ch, array(
+          CURLOPT_RETURNTRANSFER => true,
+          CURLOPT_POST => true,
+          CURLOPT_HTTPHEADER => array(
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $openrouter_key,
+          ),
+          CURLOPT_POSTFIELDS => json_encode(array(
+            'model' => 'anthropic/claude-sonnet-4',
+            'messages' => array(
+              array('role' => 'system', 'content' => $system_prompt),
+              array('role' => 'user', 'content' => $user_message),
+            ),
+            'max_tokens' => 500,
+            'temperature' => 0.7,
+          )),
+          CURLOPT_TIMEOUT => 30,
+        ));
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($http_code == 200) {
+          $data = json_decode($response, true);
+          $ai_text = isset($data['choices'][0]['message']['content']) ? $data['choices'][0]['message']['content'] : '';
+          echo json_encode(array('success' => true, 'text' => $ai_text));
+        } else {
+          echo json_encode(array('success' => false, 'message' => 'OpenRouter Fehler (HTTP ' . $http_code . '): ' . $response));
+        }
+        exit;
+
+      case 'zoho_token':
+        // HMAC-Token fuer Zoho Desk API generieren
+        $secret_q = xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = 'MODULE_ZOHO_DESK_CLIENT_SECRET'");
+        $secret_row = xtc_db_fetch_array($secret_q);
+        $token = hash_hmac('sha256', date('Y-m-d'), $secret_row['configuration_value'] ?? '');
+        echo json_encode(array('success' => true, 'token' => $token));
+        exit;
+
       case 'stats':
         $stats = array();
         $s_query = xtc_db_query("SELECT reclamation_status, COUNT(*) as cnt FROM " . TABLE_ORDERS_RECLAMATION . " GROUP BY reclamation_status");
@@ -538,6 +630,43 @@
         html += '</div>';
       }
       
+      // === Zoho Desk Ticket erstellen ===
+      html += '<hr style="margin:1.5rem 0;">';
+      html += '<h6 style="color:#c0392b;"><i class="fa-solid fa-headset"></i> Zoho Desk Ticket erstellen</h6>';
+      html += '<div style="background:#f0f7ff; padding:1rem; border-radius:8px; border:1px solid #d0e3f7;">';
+      
+      // KI-Prompt Eingabe
+      html += '<div style="margin-bottom:0.75rem;">';
+      html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">KI-Anweisung (optional):</label>';
+      html += '<div style="display:flex; gap:0.5rem;">';
+      html += '<input type="text" id="ai-prompt" style="flex:1; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" placeholder="z.B. Biete 50% Gutschrift an...">';
+      html += '<button class="btn-mrh" style="white-space:nowrap;" onclick="generateAiText(' + data.reclamation_id + ')"><i class="fa-solid fa-wand-magic-sparkles"></i> KI-Text generieren</button>';
+      html += '</div>';
+      html += '</div>';
+      
+      // Ticket-Betreff
+      html += '<div style="margin-bottom:0.75rem;">';
+      html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Betreff:</label>';
+      html += '<input type="text" id="ticket-subject" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" value="Reklamation Bestellung #' + data.orders_id + ' - Mr. Hanf">';
+      html += '</div>';
+      
+      // Ticket-Text (wird von KI befuellt oder manuell)
+      html += '<div style="margin-bottom:0.75rem;">';
+      html += '<label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Nachricht an Kunden:</label>';
+      html += '<textarea id="ticket-message" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem; resize:vertical; min-height:120px;" placeholder="Text hier eingeben oder per KI generieren lassen..."></textarea>';
+      html += '</div>';
+      
+      // Empfaenger + Senden
+      html += '<div style="display:flex; gap:0.5rem; align-items:center;">';
+      html += '<div style="flex:1;"><label style="font-size:0.8rem; font-weight:600; color:#555; display:block; margin-bottom:0.25rem;">Empf&auml;nger:</label>';
+      html += '<input type="email" id="ticket-email" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:6px; font-size:0.85rem;" value="' + escHtml(data.customers_email) + '"></div>';
+      html += '<div style="padding-top:1.2rem;"><button class="btn-mrh" style="background:#27ae60;" onclick="createZohoTicket(' + data.reclamation_id + ')"><i class="fa-solid fa-paper-plane"></i> Ticket erstellen &amp; senden</button></div>';
+      html += '</div>';
+      
+      // Status-Anzeige
+      html += '<div id="ticket-status" style="margin-top:0.75rem; display:none;"></div>';
+      html += '</div>';
+      
       document.getElementById('modal-body').innerHTML = html;
     }
 
@@ -573,6 +702,104 @@
         'closed': '<span class="status-badge status-closed">Geschlossen</span>'
       };
       return map[status] || status;
+    }
+
+    // === KI-Textgenerierung ===
+    function generateAiText(reclId) {
+      var btn = event.target.closest('button');
+      var origHtml = btn.innerHTML;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generiere...';
+      btn.disabled = true;
+      
+      var customPrompt = document.getElementById('ai-prompt').value;
+      
+      var fd = new FormData();
+      fd.append('reclamation_id', reclId);
+      fd.append('custom_prompt', customPrompt);
+      
+      fetch(DASHBOARD_URL + '?ajax=ai_generate', {
+        method: 'POST',
+        body: fd
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+        if (d.success) {
+          document.getElementById('ticket-message').value = d.text;
+        } else {
+          showTicketStatus('error', 'KI-Fehler: ' + d.message);
+        }
+      })
+      .catch(function(err) {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+        showTicketStatus('error', 'Netzwerkfehler: ' + err.message);
+      });
+    }
+    
+    // === Zoho Desk Ticket erstellen ===
+    function createZohoTicket(reclId) {
+      var subject = document.getElementById('ticket-subject').value.trim();
+      var message = document.getElementById('ticket-message').value.trim();
+      var email = document.getElementById('ticket-email').value.trim();
+      
+      if (!subject || !message || !email) {
+        showTicketStatus('error', 'Bitte Betreff, Nachricht und E-Mail ausfuellen.');
+        return;
+      }
+      
+      showTicketStatus('info', '<i class="fa-solid fa-spinner fa-spin"></i> Erstelle Ticket...');
+      
+      // Zuerst Zoho-Token holen
+      fetch(DASHBOARD_URL + '?ajax=zoho_token')
+      .then(function(r) { return r.json(); })
+      .then(function(tokenData) {
+        if (!tokenData.success) {
+          showTicketStatus('error', 'Token-Fehler: ' + (tokenData.message || 'Unbekannt'));
+          return;
+        }
+        
+        // Ticket bei Zoho erstellen
+        var fd = new FormData();
+        fd.append('token', tokenData.token);
+        fd.append('subject', subject);
+        fd.append('description', message);
+        fd.append('email', email);
+        
+        return fetch(CATALOG_URL + 'zoho_desk_api.php?action=create_ticket&token=' + tokenData.token, {
+          method: 'POST',
+          body: fd
+        });
+      })
+      .then(function(r) { if (r) return r.json(); })
+      .then(function(d) {
+        if (!d) return;
+        if (d.success) {
+          var linkHtml = '';
+          if (d.web_url) {
+            linkHtml = ' <a href="' + d.web_url + '" target="_blank" style="color:#fff; text-decoration:underline;">In Zoho oeffnen</a>';
+          }
+          showTicketStatus('success', '<i class="fa-solid fa-check-circle"></i> ' + d.message + linkHtml);
+        } else {
+          showTicketStatus('error', 'Zoho-Fehler: ' + d.error);
+        }
+      })
+      .catch(function(err) {
+        showTicketStatus('error', 'Netzwerkfehler: ' + err.message);
+      });
+    }
+    
+    function showTicketStatus(type, msg) {
+      var el = document.getElementById('ticket-status');
+      if (!el) return;
+      el.style.display = 'block';
+      var colors = {
+        'success': 'background:#d4edda;color:#155724;border:1px solid #c3e6cb;',
+        'error': 'background:#f8d7da;color:#721c24;border:1px solid #f5c6cb;',
+        'info': 'background:#d1ecf1;color:#0c5460;border:1px solid #bee5eb;'
+      };
+      el.innerHTML = '<div style="' + (colors[type] || colors.info) + 'padding:0.75rem;border-radius:6px;font-size:0.85rem;">' + msg + '</div>';
     }
 
     function escHtml(str) {

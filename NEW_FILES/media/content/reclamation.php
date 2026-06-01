@@ -299,11 +299,7 @@
           $error = true;
         }
         
-        if (check_secure_form($_POST) === false) {
-          $messageStack->add('reclamation', ENTRY_TOKEN_ERROR);
-          $error = true;
-        }
-        
+
         if ($error === false) {
           // E-Mail + Bestellnummer validieren (kein Name noetig)
           $orders_query = xtc_db_query("SELECT *
@@ -732,7 +728,7 @@
       }
     } else {    
       // === Authentifizierungs-Formular ===
-      $smarty->assign('FORM_ACTION', xtc_draw_form('reclamation', xtc_href_link(basename($PHP_SELF), xtc_get_all_get_params(array('action')).'action=auth', 'SSL')).secure_form('reclamation'));
+      $smarty->assign('FORM_ACTION', xtc_draw_form('reclamation', xtc_href_link(basename($PHP_SELF), xtc_get_all_get_params(array('action')).'action=auth', 'SSL')));
       if (in_array('reclamation', $use_captcha) && (!isset($_SESSION['customer_id']) || MODULE_CAPTCHA_LOGGED_IN == 'True')) {
         $smarty->assign('VVIMG', $mod_captcha->get_image_code());
         $smarty->assign('INPUT_CODE', $mod_captcha->get_input_code());

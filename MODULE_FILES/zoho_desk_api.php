@@ -169,7 +169,16 @@ switch ($action) {
             exit;
         }
 
-        $conversations = $zoho->getConversations($ticket_id);
+        $conversations_raw = $zoho->getConversations($ticket_id);
+        
+        // Zoho gibt {data: [...]} zurueck - Array extrahieren
+        $conversations = [];
+        if (isset($conversations_raw['data']) && is_array($conversations_raw['data'])) {
+            $conversations = $conversations_raw['data'];
+        } elseif (is_array($conversations_raw) && !isset($conversations_raw['error']) && !isset($conversations_raw['data'])) {
+            // Fallback: Direkt als Array (falls Zoho-Format sich aendert)
+            $conversations = $conversations_raw;
+        }
 
         // Thread-Daten aufbereiten
         $conv_result = [];

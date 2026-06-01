@@ -267,46 +267,51 @@
 
       case 'check_unread':
         // Alle Reklamationen mit Zoho-Ticket pruefen auf neue Antworten
-        $tickets_q = xtc_db_query("SELECT reclamation_id, zoho_ticket_id, zoho_last_thread_id FROM " . TABLE_ORDERS_RECLAMATION . " WHERE zoho_ticket_id IS NOT NULL AND zoho_ticket_id != '' AND reclamation_status NOT IN ('closed','resolved','rejected')");
+        // DIREKT ueber Zoho API (nicht ueber interne URL, da 403 durch .htaccess)
+        $tickets_q = xtc_db_query("SELECT reclamation_id, zoho_ticket_id, zoho_last_thread_id, zoho_unread_count FROM " . TABLE_ORDERS_RECLAMATION . " WHERE zoho_ticket_id IS NOT NULL AND zoho_ticket_id != '' AND reclamation_status NOT IN ('closed','resolved','rejected')");
         $unread_map = array();
         
-        $secret_q2 = xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = 'MODULE_ZOHO_DESK_CLIENT_SECRET'");
-        $secret_row2 = xtc_db_fetch_array($secret_q2);
-        $token2 = hash_hmac('sha256', date('Y-m-d'), $secret_row2['configuration_value'] ?? '');
-        $catalog_url2 = (defined('HTTPS_CATALOG_SERVER') ? HTTPS_CATALOG_SERVER : HTTP_CATALOG_SERVER) . DIR_WS_CATALOG;
+        // ZohoDeskApi laden
+        $zoho_config_keys = array('MODULE_ZOHO_DESK_CLIENT_ID', 'MODULE_ZOHO_DESK_CLIENT_SECRET', 'MODULE_ZOHO_DESK_REFRESH_TOKEN', 'MODULE_ZOHO_DESK_ORG_ID');
+        $zoho_cfg = array();
+        foreach ($zoho_config_keys as $ck) {
+          $ck_q = xtc_db_fetch_array(xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = '" . $ck . "'"));
+          $zoho_cfg[$ck] = $ck_q['configuration_value'] ?? '';
+        }
         
-        while ($t = xtc_db_fetch_array($tickets_q)) {
-          $conv_url = $catalog_url2 . 'zoho_desk_api.php?action=conversations&ticket_id=' . $t['zoho_ticket_id'] . '&token=' . $token2;
-          $ch = curl_init($conv_url);
-          curl_setopt_array($ch, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10, CURLOPT_SSL_VERIFYPEER => false));
-          $conv_resp = curl_exec($ch);
-          curl_close($ch);
-          $conv_data = json_decode($conv_resp, true);
+        $zoho_class_file = DIR_FS_CATALOG . 'includes/classes/ZohoDeskApi.php';
+        if (file_exists($zoho_class_file)) {
+          require_once($zoho_class_file);
+          $zoho_check = new ZohoDeskApi($zoho_cfg['MODULE_ZOHO_DESK_CLIENT_ID'], $zoho_cfg['MODULE_ZOHO_DESK_CLIENT_SECRET'], $zoho_cfg['MODULE_ZOHO_DESK_REFRESH_TOKEN'], $zoho_cfg['MODULE_ZOHO_DESK_ORG_ID']);
           
-          if (isset($conv_data['conversations']) && !empty($conv_data['conversations'])) {
-            // Conversations kommen neueste zuerst von Zoho
-            // Zaehle eingehende Nachrichten die NACH dem letzten ausgehenden Thread kamen
-            $unread = 0;
-            $newest_thread_id = $conv_data['conversations'][0]['id'] ?? '';
+          while ($t = xtc_db_fetch_array($tickets_q)) {
+            $raw_convs = $zoho_check->getConversations($t['zoho_ticket_id']);
+            $conversations = isset($raw_convs['data']) ? $raw_convs['data'] : array();
             
-            foreach ($conv_data['conversations'] as $thread) {
-              // Sobald wir einen ausgehenden Thread (Support-Antwort) finden, stoppen
-              if (isset($thread['direction']) && $thread['direction'] == 'out') {
-                break;
+            if (!empty($conversations)) {
+              // Conversations kommen neueste zuerst von Zoho
+              // Zaehle eingehende Nachrichten die NACH dem letzten ausgehenden Thread kamen
+              $unread = 0;
+              
+              foreach ($conversations as $thread) {
+                if (!isset($thread['type']) || $thread['type'] !== 'thread') continue;
+                // Sobald wir einen ausgehenden Thread (Support-Antwort) finden, stoppen
+                if (isset($thread['direction']) && $thread['direction'] == 'out') {
+                  break;
+                }
+                // Nur eingehende Nachrichten zaehlen die KEINE Description-Threads sind
+                if (isset($thread['direction']) && $thread['direction'] == 'in') {
+                  if (!empty($thread['isDescriptionThread'])) continue;
+                  $unread++;
+                }
               }
-              // Nur eingehende Nachrichten zaehlen die KEINE Description-Threads sind
-              if (isset($thread['direction']) && $thread['direction'] == 'in') {
-                // isDescriptionThread ueberspringen (das ist die Ticket-Beschreibung, keine Antwort)
-                if (!empty($thread['isDescriptionThread'])) continue;
-                $unread++;
+              
+              // Update DB
+              if ($unread != (int)($t['zoho_unread_count'] ?? 0)) {
+                xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET zoho_unread_count = '" . (int)$unread . "' WHERE reclamation_id = '" . (int)$t['reclamation_id'] . "'");
               }
+              $unread_map[(int)$t['reclamation_id']] = $unread;
             }
-            
-            // Update DB
-            if ($unread != (int)($t['zoho_unread_count'] ?? 0)) {
-              xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET zoho_unread_count = '" . (int)$unread . "' WHERE reclamation_id = '" . (int)$t['reclamation_id'] . "'");
-            }
-            $unread_map[(int)$t['reclamation_id']] = $unread;
           }
         }
         echo json_encode(array('success' => true, 'unread' => $unread_map));

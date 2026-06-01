@@ -74,7 +74,12 @@
   };
   
   function parseOrderDate(dateStr) {
-    // Format: "01. Juni 2026" oder "Montag, 01. Juni 2026"
+    // Format 1: "DD.MM.YYYY" (z.B. "04.03.2026")
+    var shortMatch = dateStr.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+    if (shortMatch) {
+      return new Date(parseInt(shortMatch[3]), parseInt(shortMatch[2]) - 1, parseInt(shortMatch[1]));
+    }
+    // Format 2: "01. Juni 2026" oder "Montag, 01. Juni 2026"
     var parts = dateStr.toLowerCase().replace(/,/g,'').replace(/\./g,'').trim().split(/\s+/);
     var day, month, year;
     for (var i = 0; i < parts.length; i++) {

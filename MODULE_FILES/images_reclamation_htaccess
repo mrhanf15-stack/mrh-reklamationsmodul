@@ -1,0 +1,6 @@
+# MRH 2026: Reklamationsbilder schuetzen
+# Nur ueber Admin-Proxy (reclamation_image.php) oder Dashboard-Proxy zugaenglich
+# Direkter Zugriff von aussen ist verboten
+
+Order Deny,Allow
+Deny from all

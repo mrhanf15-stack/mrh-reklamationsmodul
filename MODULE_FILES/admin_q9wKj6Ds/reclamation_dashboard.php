@@ -133,12 +133,13 @@
         exit;
         
       case 'ai_generate':
-        // KI-Textgenerierung via OpenRouter
+        // KI-Textgenerierung via OpenRouter (mit Vision-Support)
         $recl_id = (int)$_POST['reclamation_id'];
         $custom_prompt = isset($_POST['custom_prompt']) ? trim($_POST['custom_prompt']) : '';
+        $selected_images = isset($_POST['selected_images']) ? json_decode($_POST['selected_images'], true) : array();
         
-        // Reklamationsdaten laden
-        $recl = xtc_db_fetch_array(xtc_db_query("SELECT * FROM " . TABLE_ORDERS_RECLAMATION . " WHERE reclamation_id = '" . $recl_id . "'"));
+        // Reklamationsdaten laden (inkl. Bestellsprache)
+        $recl = xtc_db_fetch_array(xtc_db_query("SELECT r.*, o.customers_language FROM " . TABLE_ORDERS_RECLAMATION . " r LEFT JOIN " . TABLE_ORDERS . " o ON r.orders_id = o.orders_id WHERE r.reclamation_id = '" . $recl_id . "'"));
         if (!$recl) {
           echo json_encode(array('success' => false, 'message' => 'Reklamation nicht gefunden'));
           exit;
@@ -148,6 +149,25 @@
         while ($p = xtc_db_fetch_array($p_query)) {
           $products[] = $p;
         }
+        
+        // === Bestellsprache ermitteln ===
+        $customer_lang = 'de'; // Fallback
+        if (!empty($recl['customers_language'])) {
+          // Modified speichert z.B. 'german', 'english', 'spanish', 'french'
+          $lang_map = array('german' => 'de', 'english' => 'en', 'spanish' => 'es', 'french' => 'fr');
+          $customer_lang = isset($lang_map[strtolower($recl['customers_language'])]) ? $lang_map[strtolower($recl['customers_language'])] : 'de';
+        } elseif (!empty($recl['customers_email'])) {
+          // Fallback: Sprache aus E-Mail-Domain ableiten
+          $email_domain = strtolower(substr(strrchr($recl['customers_email'], '.'), 1));
+          $domain_lang_map = array('de' => 'de', 'at' => 'de', 'ch' => 'de', 'uk' => 'en', 'com' => 'en', 'us' => 'en', 'es' => 'es', 'fr' => 'fr', 'it' => 'it');
+          if (isset($domain_lang_map[$email_domain])) {
+            $customer_lang = $domain_lang_map[$email_domain];
+          }
+        }
+        
+        // Sprachbezeichnung fuer Prompt
+        $lang_names = array('de' => 'Deutsch (Du-Anrede)', 'en' => 'English', 'es' => 'Espanol', 'fr' => 'Francais', 'it' => 'Italiano');
+        $lang_instruction = isset($lang_names[$customer_lang]) ? $lang_names[$customer_lang] : 'Deutsch (Du-Anrede)';
         
         // Kontext fuer KI zusammenbauen
         $product_info = '';
@@ -160,26 +180,50 @@
           $product_info .= "\n";
         }
         
-        $system_prompt = "Du bist ein freundlicher Kundenservice-Mitarbeiter von Mr. Hanf (Cannabis Samen Shop). "
-          . "Schreibe eine professionelle, empathische Antwort auf eine Kundenreklamation. "
-          . "Verwende 'Du' als Anrede. Sei loesungsorientiert. "
-          . "Halte die Antwort kurz und praegnant. Unterschreibe mit 'Dein Mr. Hanf Team'.\n\n"
+        // === VERBESSERTER SYSTEM-PROMPT (Merge aus bestehendem + neuem Prompt) ===
+        $system_prompt = "Du bist ein erfahrener, empathischer Kundenservice-Mitarbeiter von Mr. Hanf (Cannabis Samen Online-Shop, www.mr-hanf.de). "
+          . "Deine Aufgabe ist es, eine professionelle Kundenantwort auf eine Reklamation zu verfassen.\n\n"
+          . "=== SPRACHE UND TON ===\n"
+          . "Antworte in: " . $lang_instruction . "\n"
+          . "Ton: Empathisch, professionell, loesungsorientiert, freundlich aber nicht unterwuerfig.\n"
+          . "Anrede: Du (bei Deutsch). Bei anderen Sprachen die uebliche hoefliche Form.\n"
+          . "Stil: Fliesstext in kurzen Absaetzen. KEIN Markdown, KEINE Gedankenstriche als Aufzaehlung, KEINE Bullet-Points, KEINE Nummerierung.\n"
+          . "Laenge: Kurz und praegnant, maximal 150 Woerter. Auf den Punkt kommen.\n"
+          . "Unterschrift: 'Dein Mr. Hanf Team'\n\n"
+          . "=== BILDANALYSE ===\n"
+          . "Wenn Bilder beigefuegt sind: Beschreibe kurz und sachlich was du auf den Bildern siehst (Zustand der Verpackung, erkennbare Schaeden, Samenqualitaet etc.). "
+          . "Beziehe deine Beobachtungen in die Antwort ein, z.B. 'Auf den Fotos sehen wir, dass...' oder 'Die Bilder zeigen...'.\n\n"
+          . "=== NO-GOS (NIEMALS) ===\n"
+          . "- Keine rechtlichen Zusagen oder Garantieversprechen\n"
+          . "- Keine konkreten Erstattungsbetraege oder Gutschriften versprechen ohne dass der Support-Mitarbeiter dies angewiesen hat\n"
+          . "- Keine Konkurrenten erwaehnen\n"
+          . "- NIEMALS auf ein Kundenportal, Kundenkonto oder Online-Formular verweisen. Stattdessen immer: 'Antworte einfach auf diese E-Mail'\n"
+          . "- Keine Floskeln wie 'Ich verstehe deinen Frust' oder 'Das tut mir wirklich leid zu hoeren'\n"
+          . "- Keine Emojis\n\n"
           . "=== BEISPIEL-ANTWORTEN ALS STILVORLAGE ===\n\n"
           . "Beispiel Nichtkeimung ausserhalb der Kulanzzeit:\n"
-          . "Ich habe mir deine Bestellung angeschaut. Leider ist es grundsaetzlich so, dass es auf die Keimung keine Garantie gibt - weder von uns noch vom Hersteller. Die Keimung haengt von vielen Faktoren ab. Zu einer Kulanz muss ich dir leider sagen, dass wir diese nur innerhalb von 30 Tagen nach Erhalt anbieten koennen. Nach dieser Frist haben wir keine Moeglichkeit mehr, die Lagerbedingungen auf Kundenseite nachzuvollziehen. Fuer zukuenftige Bestellungen wuerde ich empfehlen, uns innerhalb der 30 Tage zu kontaktieren.\n\n"
+          . "Ich habe mir deine Bestellung angeschaut. Leider ist es grundsaetzlich so, dass es auf die Keimung keine Garantie gibt, weder von uns noch vom Hersteller. Die Keimung haengt von vielen Faktoren ab. Zu einer Kulanz muss ich dir leider sagen, dass wir diese nur innerhalb von 30 Tagen nach Erhalt anbieten koennen. Nach dieser Frist haben wir keine Moeglichkeit mehr, die Lagerbedingungen auf Kundenseite nachzuvollziehen. Fuer zukuenftige Bestellungen wuerde ich empfehlen, uns innerhalb der 30 Tage zu kontaktieren.\n\n"
           . "Beispiel Nichtkeimung innerhalb Kulanzzeit:\n"
-          . "Es tut mir leid zu hoeren, dass nicht alle Samen gekeimt sind. Leider gibt es auf die Keimung grundsaetzlich keine Garantie, da sie von vielen Faktoren abhaengt. Trotzdem moechten wir dir entgegenkommen. Option 1: 25% Kulanz auf die nicht gekeimten Samen als Gutschrift oder Gutschein. Option 2: Ersatzmenge aus unserem hauseigenen Sortiment (nur Versandkosten). Sag uns einfach welche Option dir lieber ist.\n\n"
+          . "Ich habe mir deine Bestellung angeschaut. Leider gibt es auf die Keimung grundsaetzlich keine Garantie, da sie von vielen Faktoren abhaengt. Trotzdem moechten wir dir entgegenkommen. Option 1: 25% Kulanz auf die nicht gekeimten Samen als Gutschrift oder Gutschein. Option 2: Ersatzmenge aus unserem hauseigenen Sortiment (nur Versandkosten). Sag uns einfach welche Option dir lieber ist.\n\n"
           . "Beispiel falsche Bestellung komplett:\n"
           . "Es tut mir leid, dass du offenbar falsche Samen erhalten hast. Bitte schick uns ein Foto der gelieferten Samenverpackung sowie ein Bild des durchsichtigen Baggies (mit Bestellnummer). Antworte einfach auf diese E-Mail mit den Bildern, dann schauen wir uns das direkt an.\n\n"
           . "Beispiel falsche Samenmenge:\n"
           . "Bitte entschuldige die Verwechslung. Bitte antworte kurz mit einem Foto der erhaltenen Verpackung, damit wir den Vorgang sauber zuordnen koennen. Dann kuemmern wir uns schnellstmoeglich darum.\n\n"
           . "Beispiel falsches Produkt/Art:\n"
           . "Bitte entschuldige die Verwechslung bei deiner Bestellung. Damit wir das sauber pruefen koennen, schick uns bitte ein Foto der erhaltenen Samenverpackung und am besten auch ein Foto des Etiketts bzw. der Rueckseite der Verpackung.\n\n"
-          . "=== ENDE BEISPIELE ===\n"
-          . "Passe den Stil und Ton der obigen Beispiele an, aber formuliere die Antwort passend zur konkreten Situation des Kunden. Verwende die konkreten Bestelldaten und Produktnamen.";
+          . "Beispiel Transportschaden:\n"
+          . "Danke fuer die Fotos. Wir koennen sehen, dass das Paket beim Transport beschaedigt wurde. Wir werden den Fall umgehend bei der Transportversicherung melden. Unabhaengig davon moechten wir dir schnell helfen: Wir koennen dir entweder eine Ersatzlieferung zusenden oder eine Gutschrift ausstellen. Sag uns bitte welche Option du bevorzugst. Die Meldung bei der Versicherung laeuft parallel und hat keinen Einfluss auf deine Loesung.\n\n"
+          . "=== ENDE BEISPIELE ===\n\n"
+          . "=== WICHTIGE REGELN ===\n"
+          . "- Generiere NUR die Kundenantwort. Keine internen Empfehlungen, keine Notizen an den Support.\n"
+          . "- Passe den Stil und Ton der obigen Beispiele an, aber formuliere die Antwort passend zur konkreten Situation.\n"
+          . "- Verwende die konkreten Bestelldaten und Produktnamen aus den Kundendaten.\n"
+          . "- Bei Transportschaden: Erwaehne Versicherungsmeldung UND biete gleichzeitig Loesung an (Ersatz oder Gutschrift).\n"
+          . "- Wenn Bilder vorhanden sind: Beschreibe sachlich was du siehst und beziehe es in die Antwort ein.";
         
         $user_message = "Kunde: " . $recl['customers_name'] . "\n"
           . "Bestellung: #" . $recl['orders_id'] . "\n"
+          . "Bestellsprache: " . $customer_lang . "\n"
           . "Reklamierte Produkte:\n" . $product_info;
         
         // === Konversationsverlauf laden falls Ticket existiert ===
@@ -197,13 +241,11 @@
           
           if (!empty($conv_data_ai['conversations'])) {
             $user_message .= "\n\n=== BISHERIGER KONVERSATIONSVERLAUF (aelteste zuerst) ===\n";
-            // Umkehren: aelteste zuerst
             $convs_reversed = array_reverse($conv_data_ai['conversations']);
             foreach ($convs_reversed as $conv_thread) {
               $direction_label = ($conv_thread['direction'] == 'in') ? 'KUNDE' : 'SUPPORT (Mr. Hanf)';
               $author_label = (!empty($conv_thread['author']['name'])) ? $conv_thread['author']['name'] : $direction_label;
               $conv_content = !empty($conv_thread['content']) ? strip_tags($conv_thread['content']) : ($conv_thread['summary'] ?? '');
-              // Auf 500 Zeichen pro Nachricht begrenzen
               if (strlen($conv_content) > 500) $conv_content = substr($conv_content, 0, 500) . '...';
               $conv_time = !empty($conv_thread['createdTime']) ? date('d.m.Y H:i', strtotime($conv_thread['createdTime'])) : '';
               $user_message .= "\n[" . $direction_label . " - " . $author_label . " - " . $conv_time . "]:\n" . trim($conv_content) . "\n";
@@ -217,14 +259,61 @@
           $user_message .= "\nZusaetzliche Anweisung: " . $custom_prompt;
         }
         
+        // === Bilder als Base64 vorbereiten (direkt vom Dateisystem) ===
+        $image_contents = array();
+        if (!empty($selected_images) && is_array($selected_images)) {
+          $img_base_path = DIR_FS_CATALOG;
+          foreach ($selected_images as $img_path) {
+            // Sicherheit: Path-Traversal verhindern
+            $img_path = str_replace('..', '', $img_path);
+            if (strpos($img_path, 'images/reclamation/') !== 0) continue;
+            $full_img_path = $img_base_path . $img_path;
+            if (file_exists($full_img_path) && is_file($full_img_path)) {
+              $img_data = file_get_contents($full_img_path);
+              if ($img_data !== false && strlen($img_data) < 5 * 1024 * 1024) { // Max 5MB pro Bild
+                $ext = strtolower(pathinfo($full_img_path, PATHINFO_EXTENSION));
+                $mime_map = array('jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif', 'webp' => 'image/webp');
+                $mime = isset($mime_map[$ext]) ? $mime_map[$ext] : 'image/jpeg';
+                $image_contents[] = array(
+                  'type' => 'image_url',
+                  'image_url' => array(
+                    'url' => 'data:' . $mime . ';base64,' . base64_encode($img_data)
+                  )
+                );
+              }
+            }
+          }
+        }
+        
         // OpenRouter API aufrufen - Key aus DB-Konfiguration
         $or_key_q = xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = 'MODULE_RECLAMATION_OPENROUTER_KEY'");
         $or_key_row = xtc_db_fetch_array($or_key_q);
-        $openrouter_key = $or_key_row['configuration_value'] ?? '';;
+        $openrouter_key = $or_key_row['configuration_value'] ?? '';
         if (empty($openrouter_key)) {
           echo json_encode(array('success' => false, 'message' => 'OpenRouter API-Key nicht konfiguriert. Bitte in der DB unter MODULE_RECLAMATION_OPENROUTER_KEY eintragen.'));
           exit;
         }
+        
+        // === API-Request zusammenbauen (mit oder ohne Bilder) ===
+        if (!empty($image_contents)) {
+          // Multimodal: Text + Bilder als content-Array (Claude Vision Format)
+          $user_content = array();
+          $user_content[] = array('type' => 'text', 'text' => $user_message);
+          foreach ($image_contents as $img_content) {
+            $user_content[] = $img_content;
+          }
+          $messages = array(
+            array('role' => 'system', 'content' => $system_prompt),
+            array('role' => 'user', 'content' => $user_content),
+          );
+        } else {
+          // Nur Text (wie bisher)
+          $messages = array(
+            array('role' => 'system', 'content' => $system_prompt),
+            array('role' => 'user', 'content' => $user_message),
+          );
+        }
+        
         $ch = curl_init('https://openrouter.ai/api/v1/chat/completions');
         curl_setopt_array($ch, array(
           CURLOPT_RETURNTRANSFER => true,
@@ -235,14 +324,11 @@
           ),
           CURLOPT_POSTFIELDS => json_encode(array(
             'model' => 'anthropic/claude-sonnet-4',
-            'messages' => array(
-              array('role' => 'system', 'content' => $system_prompt),
-              array('role' => 'user', 'content' => $user_message),
-            ),
-            'max_tokens' => 500,
-            'temperature' => 0.7,
+            'messages' => $messages,
+            'max_tokens' => 800,
+            'temperature' => 0.6,
           )),
-          CURLOPT_TIMEOUT => 30,
+          CURLOPT_TIMEOUT => 60,
         ));
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -251,7 +337,7 @@
         if ($http_code == 200) {
           $data = json_decode($response, true);
           $ai_text = isset($data['choices'][0]['message']['content']) ? $data['choices'][0]['message']['content'] : '';
-          echo json_encode(array('success' => true, 'text' => $ai_text));
+          echo json_encode(array('success' => true, 'text' => $ai_text, 'images_sent' => count($image_contents), 'lang' => $customer_lang));
         } else {
           echo json_encode(array('success' => false, 'message' => 'OpenRouter Fehler (HTTP ' . $http_code . '): ' . $response));
         }
@@ -326,30 +412,41 @@
           exit;
         }
         
-        $secret_q3 = xtc_db_query("SELECT configuration_value FROM configuration WHERE configuration_key = 'MODULE_ZOHO_DESK_CLIENT_SECRET'");
-        $secret_row3 = xtc_db_fetch_array($secret_q3);
-        $token3 = hash_hmac('sha256', date('Y-m-d'), $secret_row3['configuration_value'] ?? '');
-        $catalog_url3 = (defined('HTTPS_CATALOG_SERVER') ? HTTPS_CATALOG_SERVER : HTTP_CATALOG_SERVER) . DIR_WS_CATALOG;
+        // Direkt ZohoDeskApi laden (kein cURL-Umweg, da 403 durch Reverse-Proxy)
+        $class_file = DIR_FS_CATALOG . 'includes/classes/ZohoDeskApi.php';
+        if (!file_exists($class_file)) {
+          echo json_encode(array('success' => false, 'message' => 'ZohoDeskApi.php nicht gefunden'));
+          exit;
+        }
+        require_once($class_file);
         
-        $close_url = $catalog_url3 . 'zoho_desk_api.php?action=update_status&token=' . $token3;
-        $ch = curl_init($close_url);
-        curl_setopt_array($ch, array(
-          CURLOPT_RETURNTRANSFER => true,
-          CURLOPT_POST => true,
-          CURLOPT_POSTFIELDS => http_build_query(array('ticket_id' => $recl_data['zoho_ticket_id'], 'status' => 'Closed')),
-          CURLOPT_TIMEOUT => 10,
-          CURLOPT_SSL_VERIFYPEER => false,
-        ));
-        $close_resp = curl_exec($ch);
-        curl_close($ch);
-        $close_data = json_decode($close_resp, true);
+        // Zoho-Credentials aus DB laden
+        $zoho_cfg = array();
+        $cfg_q = xtc_db_query("SELECT configuration_key, configuration_value FROM configuration WHERE configuration_key IN ('MODULE_ZOHO_DESK_CLIENT_ID','MODULE_ZOHO_DESK_CLIENT_SECRET','MODULE_ZOHO_DESK_REFRESH_TOKEN','MODULE_ZOHO_DESK_ORG_ID')");
+        while ($cfg_row = xtc_db_fetch_array($cfg_q)) {
+          $zoho_cfg[$cfg_row['configuration_key']] = $cfg_row['configuration_value'];
+        }
         
-        if (isset($close_data['success']) && $close_data['success']) {
-          // Auch Reklamation auf closed setzen
-          xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET reclamation_status = 'closed', zoho_unread_count = 0 WHERE reclamation_id = '" . $recl_id . "'");
-          echo json_encode(array('success' => true, 'message' => 'Ticket geschlossen'));
+        if (empty($zoho_cfg['MODULE_ZOHO_DESK_CLIENT_ID']) || empty($zoho_cfg['MODULE_ZOHO_DESK_REFRESH_TOKEN'])) {
+          echo json_encode(array('success' => false, 'message' => 'Zoho Desk nicht konfiguriert'));
+          exit;
+        }
+        
+        $zoho_api = new ZohoDeskApi(
+          $zoho_cfg['MODULE_ZOHO_DESK_CLIENT_ID'],
+          $zoho_cfg['MODULE_ZOHO_DESK_CLIENT_SECRET'],
+          $zoho_cfg['MODULE_ZOHO_DESK_REFRESH_TOKEN'],
+          $zoho_cfg['MODULE_ZOHO_DESK_ORG_ID']
+        );
+        
+        $close_result = $zoho_api->updateTicketStatus($recl_data['zoho_ticket_id'], 'Closed');
+        
+        if (isset($close_result['error'])) {
+          echo json_encode(array('success' => false, 'message' => 'Zoho-Fehler: ' . $close_result['error']));
         } else {
-          echo json_encode(array('success' => false, 'message' => 'Zoho-Fehler: ' . (isset($close_data['error']) ? $close_data['error'] : 'Unbekannt')));
+          // Auch Reklamation auf closed setzen + ins Archiv verschieben
+          xtc_db_query("UPDATE " . TABLE_ORDERS_RECLAMATION . " SET reclamation_status = 'closed', zoho_unread_count = 0, is_archived = 1 WHERE reclamation_id = '" . $recl_id . "'");
+          echo json_encode(array('success' => true, 'message' => 'Ticket geschlossen und archiviert'));
         }
         exit;
 
@@ -912,14 +1009,20 @@
       }
       html += '</tbody></table>';
       
-      // Bilder
+      // Bilder (mit Checkboxen fuer KI-Auswahl + Proxy-URL)
       if (data.images && data.images.length > 0) {
         html += '<h6 style="color:#c0392b; margin-top:1.5rem;"><i class="fa-solid fa-images"></i> Hochgeladene Bilder (' + data.images.length + ')</h6>';
-        html += '<div style="display:flex; flex-wrap:wrap; gap:0.5rem;">';
+        html += '<div style="display:flex; flex-wrap:wrap; gap:0.75rem;">';
         for (var j = 0; j < data.images.length; j++) {
           var img = data.images[j];
-          var imgUrl = CATALOG_URL + img.image_path;
+          var imgUrl = ADMIN_URL + 'reclamation_image.php?file=' + encodeURIComponent(img.image_path);
+          html += '<div style="display:flex; flex-direction:column; align-items:center; gap:0.25rem;">';
           html += '<a href="' + imgUrl + '" target="_blank"><img src="' + imgUrl + '" style="max-height:120px;border-radius:6px;border:1px solid #dee2e6;" alt="' + escHtml(img.image_original_name) + '"></a>';
+          html += '<label style="display:flex; align-items:center; gap:0.25rem; font-size:0.75rem; color:#555; cursor:pointer; user-select:none;">';
+          html += '<input type="checkbox" class="ki-image-select" data-path="' + escHtml(img.image_path) + '" checked>';
+          html += '<i class="fa-solid fa-wand-magic-sparkles" style="font-size:0.65rem;"></i> An KI senden';
+          html += '</label>';
+          html += '</div>';
         }
         html += '</div>';
       }
@@ -1051,7 +1154,7 @@
       return map[status] || status;
     }
 
-    // === KI-Textgenerierung ===
+    // === KI-Textgenerierung (mit Bild-Auswahl) ===
     function generateAiText(reclId) {
       var btn = event.target.closest('button');
       var origHtml = btn.innerHTML;
@@ -1060,9 +1163,22 @@
       
       var customPrompt = document.getElementById('ai-prompt').value;
       
+      // Ausgewaehlte Bilder sammeln
+      var selectedImages = [];
+      var checkboxes = document.querySelectorAll('.ki-image-select:checked');
+      for (var i = 0; i < checkboxes.length; i++) {
+        selectedImages.push(checkboxes[i].getAttribute('data-path'));
+      }
+      
       var fd = new FormData();
       fd.append('reclamation_id', reclId);
       fd.append('custom_prompt', customPrompt);
+      fd.append('selected_images', JSON.stringify(selectedImages));
+      
+      // Hinweis anzeigen wenn Bilder gesendet werden
+      if (selectedImages.length > 0) {
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generiere (' + selectedImages.length + ' Bilder)...';
+      }
       
       fetch(DASHBOARD_URL + '?ajax=ai_generate', {
         method: 'POST',
@@ -1074,6 +1190,11 @@
         btn.disabled = false;
         if (d.success) {
           document.getElementById('ticket-message').value = d.text;
+          // Info ueber gesendete Bilder und erkannte Sprache
+          var infoMsg = 'KI-Text generiert';
+          if (d.images_sent && d.images_sent > 0) infoMsg += ' (' + d.images_sent + ' Bilder analysiert)';
+          if (d.lang && d.lang != 'de') infoMsg += ' [Sprache: ' + d.lang.toUpperCase() + ']';
+          showTicketStatus('success', infoMsg);
         } else {
           showTicketStatus('error', 'KI-Fehler: ' + d.message);
         }

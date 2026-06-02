@@ -158,14 +158,15 @@
             </table>
             
             <?php
-            // Bilder anzeigen
+            // Bilder anzeigen (ueber Admin-Proxy, da /images/reclamation/ per .htaccess gesperrt)
             $img_query = xtc_db_query("SELECT * FROM " . TABLE_ORDERS_RECLAMATION_IMAGES . " WHERE reclamation_id = '" . $recl_id . "'");
             if (xtc_db_num_rows($img_query) > 0) {
+              $admin_img_proxy = (defined('HTTPS_SERVER') && HTTPS_SERVER != '' ? HTTPS_SERVER : HTTP_SERVER) . DIR_WS_ADMIN . 'reclamation_image.php?file=';
               echo '<div class="mt-2 mb-3">';
               echo '<strong><span class="fa-solid fa-images me-1"></span> Hochgeladene Bilder:</strong><br>';
               echo '<div class="d-flex flex-wrap gap-2 mt-1">';
               while ($img = xtc_db_fetch_array($img_query)) {
-                $img_url = HTTP_SERVER . DIR_WS_CATALOG . $img['image_path'];
+                $img_url = $admin_img_proxy . urlencode($img['image_path']);
                 echo '<a href="' . $img_url . '" target="_blank" title="' . htmlspecialchars($img['image_original_name']) . '">';
                 echo '<img src="' . $img_url . '" style="max-height:80px;border-radius:4px;border:1px solid #dee2e6;" alt="' . htmlspecialchars($img['image_original_name']) . '">';
                 echo '</a>';
